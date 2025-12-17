@@ -247,10 +247,27 @@ class ContentProcessor:
 
     def _resolve_layout(self, path: Path, folder: str) -> str:
         name = path.stem
+        layout_dir = self.site_dir / "_layouts"
         if "[" in name and "]" in name:
             return name.split("[", 1)[1].split("]", 1)[0]
         group = self._group_from_folder(folder)
-        return group if group else "default"
+        candidates: list[str] = []
+        if folder:
+            # Most specific: folder-based layout matching the full folder/name path.
+            candidates.append(f"{folder}/{name}")
+            # Next: layout matching just the top-level folder.
+            candidates.append(group)
+        else:
+            # Root-level file: try a layout that matches the filename.
+            candidates.append(name)
+        # Fallback: default layout.
+        candidates.append("default")
+        for candidate in candidates:
+            for suffix in (".html.jinja", ".jinja", ".html", ""):
+                target = layout_dir / f"{candidate}{suffix}"
+                if target.exists():
+                    return candidate
+        return "default"
 
     def _group_from_folder(self, folder: str) -> str:
         if not folder:

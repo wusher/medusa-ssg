@@ -51,7 +51,7 @@ def test_content_processing_builds_pages(tmp_path):
     post = next(p for p in pages if p.group == "posts")
     assert post.slug == "my-post"
     assert post.date == datetime(2024, 1, 15)
-    assert post.layout == "posts"
+    assert post.layout == "default"
 
     contact = next(p for p in pages if p.layout == "hero")
     assert contact.source_type == "jinja"
@@ -79,3 +79,41 @@ def test_rewrite_inline_images(tmp_path):
     html = '<p><img src="photo.png"></p>'
     rewritten = processor._rewrite_inline_images(html, "gallery")
     assert "/assets/images/gallery/photo.png" in rewritten
+
+
+def test_layout_resolution_specificity(tmp_path):
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("d", encoding="utf-8")
+    (site / "_layouts" / "about.html.jinja").write_text("a", encoding="utf-8")
+    (site / "_layouts" / "posts.html.jinja").write_text("p", encoding="utf-8")
+    (site / "_layouts" / "posts").mkdir()
+    (site / "_layouts" / "posts" / "happy.html.jinja").write_text("ph", encoding="utf-8")
+
+    processor = ContentProcessor(site)
+
+    about_path = site / "about.md"
+    about_path.write_text("# About", encoding="utf-8")
+    about_page = processor._build_page(about_path, draft=False)
+    assert about_page.layout == "about"
+
+    happy_path = site / "posts" / "happy.md"
+    happy_path.parent.mkdir(parents=True, exist_ok=True)
+    happy_path.write_text("# Happy", encoding="utf-8")
+    happy_page = processor._build_page(happy_path, draft=False)
+    assert happy_page.layout == "posts/happy"
+
+    other_path = site / "posts" / "other.md"
+    other_path.write_text("# Other", encoding="utf-8")
+    other_page = processor._build_page(other_path, draft=False)
+    assert other_page.layout == "posts"
+
+
+def test_layout_resolution_missing_layouts(tmp_path):
+    site = tmp_path / "site"
+    site.mkdir(parents=True)
+    processor = ContentProcessor(site)
+    path = site / "orphan.md"
+    path.write_text("# Orphan", encoding="utf-8")
+    page = processor._build_page(path, draft=False)
+    assert page.layout == "default"
