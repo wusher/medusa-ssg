@@ -143,6 +143,8 @@ class DevServer:
         )
         self.ws_port = resolved_ws
         self.http_port = base_http
+        # Dev server always uses local root_url for absolute asset/page URLs.
+        self._root_url = f"http://localhost:{self.http_port}"
         self._observer: Observer | None = None
         self._ws_clients: set = set()
         self._loop = asyncio.new_event_loop()
@@ -154,7 +156,7 @@ class DevServer:
     def start(
         self, include_drafts: bool = False
     ) -> None:  # pragma: no cover - integration path
-        build_site(self.project_root, include_drafts=include_drafts)
+        build_site(self.project_root, include_drafts=include_drafts, root_url=self._root_url)
         self._last_signature = self._compute_signature()
         threading.Thread(target=self._start_http, daemon=True).start()
         threading.Thread(target=self._start_ws, daemon=True).start()
@@ -231,7 +233,7 @@ class DevServer:
         self._rebuilding = True
         try:
             print("Change detected; rebuilding...")
-            build_site(self.project_root, include_drafts=include_drafts)
+            build_site(self.project_root, include_drafts=include_drafts, root_url=self._root_url)
             self._last_signature = signature
             self._broadcast_reload()
         finally:

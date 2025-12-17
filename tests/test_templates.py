@@ -48,6 +48,12 @@ def test_url_for_without_site_url(tmp_path):
     assert engine._url_for("/assets/css/main.css") == "/assets/css/main.css"
 
 
+def test_url_for_prefers_root_url(tmp_path):
+    engine = TemplateEngine(tmp_path, {"url": "https://site.com"}, root_url="https://root.com")
+    assert engine._url_for("/assets/app.js") == "https://root.com/assets/app.js"
+    assert engine._url_for("posts/") == "https://root.com/posts/"
+
+
 def test_render_body_jinja_and_layout_fallback(tmp_path):
     site = tmp_path / "site"
     site.mkdir()

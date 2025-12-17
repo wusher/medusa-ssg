@@ -73,3 +73,16 @@ def test_path_helpers_and_tags_index(tmp_path):
     pages = [Page(["python", "web"]), Page(["python"])]
     tags = utils.build_tags_index(pages)
     assert set(tags["python"]) == set(pages)
+
+
+def test_join_and_absolutize_urls():
+    assert utils.join_root_url("https://example.com", "/posts/") == "https://example.com/posts/"
+    assert utils.join_root_url("https://example.com/blog/", "posts/") == "https://example.com/blog/posts/"
+    assert utils.join_root_url("", "/posts/") == "/posts/"
+
+    html = '<a href="/about/"></a><img src="https://cdn.com/x.png"><a href="#frag"></a>'
+    rewritten = utils.absolutize_html_urls(html, "https://example.com")
+    assert 'href="https://example.com/about/"' in rewritten
+    assert "cdn.com" in rewritten
+    assert "#frag" in rewritten
+    assert utils.absolutize_html_urls(html, "") == html

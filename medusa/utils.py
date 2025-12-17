@@ -21,6 +21,8 @@ from typing import Iterable
 
 
 HASHTAG_RE = re.compile(r"#([a-zA-Z][a-zA-Z0-9]{2,}(?:/[a-zA-Z0-9]+)*)")
+_URL_ATTR_RE = re.compile(r'(?P<prefix>\b(?:href|src|action)=["\'])(?P<url>[^"\']+)(?P<suffix>["\'])')
+_URL_SKIP_PREFIXES = ("http://", "https://", "//", "mailto:", "tel:", "#", "javascript:")
 
 
 def slugify(name: str) -> str:
@@ -127,3 +129,32 @@ def build_tags_index(pages: Iterable) -> dict[str, list]:
         for tag in page.tags:
             tags.setdefault(tag, []).append(page)
     return tags
+
+
+def join_root_url(root_url: str, path: str) -> str:
+    """Safely join a root URL and a path, avoiding double slashes.
+
+    Args:
+        root_url: Base URL (e.g., https://example.com/blog).
+        path: Path beginning with or without a leading slash.
+    """
+    if not root_url:
+        return path
+    base = root_url.rstrip("/")
+    suffix = path if path.startswith("/") else f"/{path}"
+    return f"{base}{suffix}"
+
+
+def absolutize_html_urls(html: str, root_url: str) -> str:
+    """Rewrite root-relative URLs in HTML to absolute URLs using root_url."""
+    if not root_url:
+        return html
+
+    def repl(match: re.Match) -> str:
+        url = match.group("url")
+        if not url or url.startswith(_URL_SKIP_PREFIXES):
+            return match.group(0)
+        absolute = join_root_url(root_url, url)
+        return f"{match.group('prefix')}{absolute}{match.group('suffix')}"
+
+    return _URL_ATTR_RE.sub(repl, html)

@@ -23,12 +23,13 @@ import yaml
 from .assets import AssetPipeline
 from .content import ContentProcessor, Page
 from .templates import TemplateEngine
-from .utils import build_tags_index, ensure_clean_dir
+from .utils import absolutize_html_urls, build_tags_index, ensure_clean_dir
 
 
 DEFAULT_CONFIG = {
     "output_dir": "output",
     "port": 4000,
+    "root_url": "",
 }
 
 
@@ -91,35 +92,43 @@ def load_data(project_root: Path) -> dict[str, Any]:
     return data
 
 
-def build_site(project_root: Path, include_drafts: bool = False) -> BuildResult:
+def build_site(project_root: Path, include_drafts: bool = False, root_url: str | None = None) -> BuildResult:
     """Build the entire static site.
 
     Args:
         project_root: Root directory of the project.
         include_drafts: Whether to include draft pages (starting with _).
+        root_url: Optional base URL to absolutize links with.
 
     Returns:
         BuildResult containing all pages, output directory, and site data.
     """
     config = load_config(project_root)
+    if root_url is not None:
+        config["root_url"] = root_url
     output_dir = project_root / config.get("output_dir", "output")
     ensure_clean_dir(output_dir)
 
     data = load_data(project_root)
+    resolved_root = str(config.get("root_url") or "")
+    if isinstance(data, dict) and resolved_root:
+        data.setdefault("root_url", resolved_root)
     site_dir = project_root / "site"
     if not site_dir.exists():
         raise FileNotFoundError(f"Expected site directory at {site_dir}")
     pages = ContentProcessor(site_dir).load(include_drafts=include_drafts)
     tags = build_tags_index(pages)
 
-    engine = TemplateEngine(site_dir, data)
+    engine = TemplateEngine(site_dir, data, root_url=resolved_root)
     engine.update_collections(pages, tags)
     for page in pages:
         rendered = engine.render_page(page)
+        if resolved_root:
+            rendered = absolutize_html_urls(rendered, resolved_root)
         _write_page(output_dir, page, rendered)
 
     AssetPipeline(project_root, output_dir).run()
-    _copy_static_html(site_dir, output_dir)
+    _copy_static_html(site_dir, output_dir, resolved_root)
     _write_sitemap(output_dir, data, pages)
     _write_rss(output_dir, data, pages)
     return BuildResult(pages=pages, output_dir=output_dir, data=data)
@@ -141,7 +150,7 @@ def _write_page(output_dir: Path, page: Page, rendered: str) -> None:
         f.write(rendered)
 
 
-def _copy_static_html(site_dir: Path, output_dir: Path) -> None:
+def _copy_static_html(site_dir: Path, output_dir: Path, root_url: str) -> None:
     """Copy plain HTML files directly to output without layout processing.
 
     Args:
@@ -155,7 +164,10 @@ def _copy_static_html(site_dir: Path, output_dir: Path) -> None:
             continue
         dest = output_dir / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        content = path.read_text(encoding="utf-8")
+        if root_url:
+            content = absolutize_html_urls(content, root_url)
+        dest.write_text(content, encoding="utf-8")
 
 
 def _write_sitemap(

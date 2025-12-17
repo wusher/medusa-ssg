@@ -87,6 +87,10 @@ Create `medusa.yaml` in your project root:
 # Output directory (default: output)
 output_dir: output
 
+# Base URL used to absolutize all links in output (default: empty).
+# medusa serve always uses http://localhost:<port> for dev builds.
+root_url: https://example.com
+
 # Dev server port (default: 4000)
 port: 4000
 

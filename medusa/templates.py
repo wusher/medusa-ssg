@@ -16,6 +16,7 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoe
 
 from .content import Page
 from .collections import PageCollection, TagCollection
+from .utils import join_root_url
 
 
 class TemplateEngine:
@@ -29,7 +30,7 @@ class TemplateEngine:
         tags: Dictionary of tags to pages.
     """
 
-    def __init__(self, site_dir: Path, data: dict[str, Any]):
+    def __init__(self, site_dir: Path, data: dict[str, Any], root_url: str | None = None):
         """Initialize the template engine.
 
         Args:
@@ -38,6 +39,7 @@ class TemplateEngine:
         """
         self.site_dir = site_dir
         self.data = data
+        self.root_url = (root_url or (data.get("root_url") if isinstance(data, dict) else "")) or ""
         self.env = Environment(
             loader=FileSystemLoader(
                 [
@@ -71,12 +73,10 @@ class TemplateEngine:
         if path.startswith(("http://", "https://", "//")):
             return path
         # Always keep asset URLs relative to avoid cross-origin issues during dev.
-        if path.startswith("/assets"):
-            return path
-        base = self.data.get("url", "") if isinstance(self.data, dict) else ""
-        prefix = base.rstrip("/") if base else ""
-        suffix = "/" + path.lstrip("/")
-        return f"{prefix}{suffix}" if prefix else suffix
+        base = self.root_url or (self.data.get("url", "") if isinstance(self.data, dict) else "")
+        if base:
+            return join_root_url(base, path if path.startswith("/") else f"/{path}")
+        return path if path.startswith("/") else f"/{path}"
 
     def render_page(self, page: Page) -> str:
         context = {

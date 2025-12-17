@@ -1,2 +1,3 @@
 output_dir: output
 port: 4000
+root_url: https://example.com

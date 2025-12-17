@@ -31,7 +31,7 @@ def test_cli_build_and_serve(monkeypatch, tmp_path):
     runner.invoke(cli, ["new", str(project)], env={"MEDUSA_SKIP_NPM_INSTALL": "1"})
     monkeypatch.chdir(project)
 
-    def fake_build_site(root, include_drafts=False):
+    def fake_build_site(root, include_drafts=False, root_url=None):
         out = root / "output"
         out.mkdir()
         return BuildResult(pages=[], output_dir=out, data={})

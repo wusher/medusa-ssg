@@ -247,7 +247,7 @@ def test_start_watcher_and_rebuild(monkeypatch, tmp_path):
     assert any("site" in path for path, _ in scheduled if isinstance(path, str))
 
     calls = []
-    monkeypatch.setattr("medusa.server.build_site", lambda root, include_drafts=False: calls.append(include_drafts))
+    monkeypatch.setattr("medusa.server.build_site", lambda root, include_drafts=False, **kwargs: calls.append(include_drafts))
     server._broadcast_reload = lambda: calls.append("reloaded")
     server.rebuild(include_drafts=True)
     assert calls == [True, "reloaded"]

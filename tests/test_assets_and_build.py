@@ -20,11 +20,13 @@ def create_project(tmp_path: Path) -> Path:
     (project / "assets" / "images").mkdir(parents=True)
     (project / "data").mkdir()
 
-    (project / "medusa.yaml").write_text("output_dir: output\nport: 4000\n", encoding="utf-8")
+    (project / "medusa.yaml").write_text("output_dir: output\nport: 4000\nroot_url: https://example.com\n", encoding="utf-8")
     (project / "data" / "site.yaml").write_text("title: Test\nurl: https://example.com\n", encoding="utf-8")
     (project / "data" / "nav.yaml").write_text("- label: Home\n  url: /\n", encoding="utf-8")
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
-    (site / "index.md").write_text("# Hello\n\nWelcome!", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "<link rel='stylesheet' href=\"{{ url_for('/assets/css/main.css') }}\">{{ page_content }}", encoding="utf-8"
+    )
+    (site / "index.md").write_text("# Hello\n\nWelcome!\n\n[About](/about/)", encoding="utf-8")
     (project / "assets" / "css" / "main.css").write_text("@tailwind base;", encoding="utf-8")
     (project / "assets" / "js" / "main.js").write_text("function test(){ return 1 + 1; }", encoding="utf-8")
 
@@ -191,6 +193,9 @@ def test_build_site_creates_output(monkeypatch, tmp_path):
     assert isinstance(result, BuildResult)
     index = result.output_dir / "index.html"
     assert index.exists()
+    html = index.read_text(encoding="utf-8")
+    assert "https://example.com/assets/css/main.css" in html
+    assert "https://example.com/about/" in html
 
     sitemap = result.output_dir / "sitemap.xml"
     rss = result.output_dir / "rss.xml"
@@ -217,6 +222,29 @@ def test_build_copies_plain_html(tmp_path):
     assert out_file.exists()
     assert "plain" in out_file.read_text(encoding="utf-8")
     assert not (result.output_dir / "_hidden" / "secret.html").exists()
+
+
+def test_build_root_url_override(tmp_path):
+    project = create_project(tmp_path)
+    result = build_site(project, include_drafts=False, root_url="https://override.com")
+    html = (result.output_dir / "index.html").read_text(encoding="utf-8")
+    assert "https://override.com/assets/css/main.css" in html
+    assert "https://override.com/about/" in html
+
+
+def test_build_without_root_url(tmp_path):
+    project = create_project(tmp_path)
+    # wipe root_url and site url to force relative output
+    (project / "medusa.yaml").write_text("output_dir: output\nport: 4000\n", encoding="utf-8")
+    (project / "data" / "site.yaml").write_text("title: Test\n", encoding="utf-8")
+    static_html = project / "site" / "static" / "plain.html"
+    static_html.parent.mkdir(parents=True, exist_ok=True)
+    static_html.write_text("<html><body>plain</body></html>", encoding="utf-8")
+    result = build_site(project, include_drafts=False)
+    html = (result.output_dir / "index.html").read_text(encoding="utf-8")
+    assert 'href="/assets/css/main.css"' in html
+    assert 'href="/about/"' in html
+    assert (result.output_dir / "static" / "plain.html").read_text(encoding="utf-8").startswith("<html>")
 
 
 def test_build_helpers_handle_missing(monkeypatch, tmp_path):
