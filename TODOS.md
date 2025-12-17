@@ -3,8 +3,10 @@
 - Add linting (ruff/black pre-commit hook)
 - Build out code pages section
 - Configure GitHub Pages deployment
+- add the ability to root a site so relative paths will work
 
 ## GitHub Pages setup
+
 1) Enable GitHub Actions in the repository settings.
 2) Add a workflow (e.g., `.github/workflows/pages.yml`) that:
    - Checks out the repo.
