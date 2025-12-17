@@ -1,4 +1,6 @@
 import asyncio
+import io
+import time
 from pathlib import Path
 
 import pytest
@@ -52,6 +54,94 @@ def test_async_broadcast_tracks_stale_clients():
     asyncio.run(server._async_broadcast("hello"))
     assert good.messages == ["hello"]
     assert bad not in server._ws_clients
+
+
+def test_dev_server_port_override(tmp_path):
+    server = DevServer(tmp_path, http_port=5055, ws_port=None)
+    assert server.http_port == 5055
+    assert server.ws_port == 5056
+
+    explicit = DevServer(tmp_path, http_port=5055, ws_port=6000)
+    assert explicit.ws_port == 6000
+
+
+def test_rebuild_guard(monkeypatch, tmp_path):
+    server = DevServer(tmp_path)
+    calls = []
+    monkeypatch.setattr("medusa.server.build_site", lambda *args, **kwargs: calls.append("built"))
+    server._broadcast_reload = lambda: calls.append("reloaded")
+    server._debounce_seconds = 0.0
+
+    sigs = [("a",), ("a",), ("b",)]
+
+    def fake_sig():
+        return sigs.pop(0) if sigs else ("b",)
+
+    server._compute_signature = fake_sig
+    server.rebuild(include_drafts=False)
+    server._rebuilding = True
+    server.rebuild(include_drafts=False)  # skipped due to rebuilding flag
+    server._rebuilding = False
+    server.rebuild(include_drafts=False)  # skipped due to same signature
+    server.rebuild(include_drafts=False)  # signature changed -> rebuild
+    assert calls == ["built", "reloaded", "built", "reloaded"]
+
+
+def test_compute_signature_handles_missing(monkeypatch, tmp_path):
+    server = DevServer(tmp_path)
+    (tmp_path / "site").mkdir()
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "data").mkdir()
+    (tmp_path / "site" / "nested").mkdir()
+    (tmp_path / "site" / "index.md").write_text("hi", encoding="utf-8")
+    (tmp_path / "assets" / "main.js").write_text("js", encoding="utf-8")
+    (tmp_path / "data" / "site.yaml").write_text("title: t", encoding="utf-8")
+    broken = tmp_path / "assets" / "missing.txt"
+    broken.symlink_to(tmp_path / "nope.txt")
+
+    sig = server._compute_signature()
+    assert sig is not None
+    assert any("site/index.md" in entry[0] for entry in sig)
+
+
+def test_compute_signature_empty(tmp_path):
+    server = DevServer(tmp_path)
+    assert server._compute_signature() is None
+
+
+def test_change_handler_skips_node_modules(tmp_path):
+    server = DevServer(tmp_path)
+    handler = _ChangeHandler(server, include_drafts=False)
+
+    class DummyEvent:
+        def __init__(self, path, is_dir=False):
+            self.src_path = path
+            self.is_directory = is_dir
+
+    # Should be skipped
+    handler.on_any_event(DummyEvent(str(tmp_path / "node_modules" / "file.txt")))
+    # Non-output should trigger rebuild
+    called = {}
+
+    def fake_rebuild(include_drafts):
+        called["hit"] = True
+
+    server.rebuild = fake_rebuild
+    handler.on_any_event(DummyEvent(str(tmp_path / "site" / "file.txt")))
+    assert called["hit"]
+
+
+def test_ws_start_failure(monkeypatch, tmp_path, capsys):
+    server = DevServer(tmp_path, http_port=5055, ws_port=5057)
+
+    async def fake_run():
+        raise OSError("bind error")
+
+    monkeypatch.setattr(server, "_run_ws_server", fake_run)
+    server._loop = asyncio.new_event_loop()
+    server._start_ws()
+    out = capsys.readouterr().out
+    assert "failed to start" in out
 
 
 def test_broadcast_reload_invokes_runner(monkeypatch):
@@ -229,3 +319,146 @@ def test_send_head_falls_back(tmp_path):
     result = _ReloadHandler.send_head(handler)
     handler.wfile.close()
     assert result is not None
+
+
+def test_serve_404_uses_custom_page(tmp_path):
+    error_page = tmp_path / "404.html"
+    error_page.write_text("<html><body>oops</body></html>", encoding="utf-8")
+
+    handler = _ReloadHandler.__new__(_ReloadHandler)
+    handler.path = "/missing"
+    handler.directory = str(tmp_path)
+    handler.command = "GET"
+    handler.request_version = "HTTP/1.1"
+    handler.server_version = ""
+    handler.sys_version = ""
+    handler._headers_buffer = []
+    handler.headers = {}
+    handler.rfile = io.BytesIO(b"")
+    handler.wfile = io.BytesIO()
+
+    codes = []
+    handler.send_response = lambda code, message=None: codes.append(code)
+    handler.send_header = lambda *args, **kwargs: None
+    handler.end_headers = lambda: None
+    handler.send_error = lambda *args, **kwargs: codes.append("error")
+
+    result = _ReloadHandler._serve_404(handler)
+    assert result is None
+    assert codes == [404]
+    body = handler.wfile.getvalue().decode()
+    assert "oops" in body
+    assert "reload" in body
+
+
+def test_send_head_serves_directory_index(tmp_path):
+    posts = tmp_path / "posts"
+    posts.mkdir()
+    (posts / "index.html").write_text("<html><body>index</body></html>", encoding="utf-8")
+
+    handler = _ReloadHandler.__new__(_ReloadHandler)
+    handler.path = "/posts/"
+    handler.directory = str(tmp_path)
+    handler.command = "GET"
+    handler.request_version = "HTTP/1.1"
+    handler.server_version = ""
+    handler.sys_version = ""
+    handler._headers_buffer = []
+    handler.headers = {}
+    handler.rfile = io.BytesIO(b"")
+    handler.wfile = io.BytesIO()
+
+    codes = []
+    handler.send_response = lambda code, message=None: codes.append(code)
+    handler.send_header = lambda *args, **kwargs: None
+    handler.end_headers = lambda: None
+
+    result = _ReloadHandler.send_head(handler)
+    assert result is None
+    assert codes == [200]
+    assert b"reload" in handler.wfile.getvalue()
+
+
+def test_serve_404_without_body_tag(tmp_path):
+    error_page = tmp_path / "404.html"
+    error_page.write_text("<html>no body tag</html>", encoding="utf-8")
+
+    handler = _ReloadHandler.__new__(_ReloadHandler)
+    handler.path = "/missing"
+    handler.directory = str(tmp_path)
+    handler.command = "GET"
+    handler.request_version = "HTTP/1.1"
+    handler.server_version = ""
+    handler.sys_version = ""
+    handler._headers_buffer = []
+    handler.headers = {}
+    handler.rfile = io.BytesIO(b"")
+    handler.wfile = io.BytesIO()
+
+    handler.send_response = lambda *args, **kwargs: None
+    handler.send_header = lambda *args, **kwargs: None
+    handler.end_headers = lambda: None
+    handler.send_error = lambda *args, **kwargs: None
+
+    _ReloadHandler._serve_404(handler)
+    body = handler.wfile.getvalue().decode()
+    assert "reload" in body
+
+
+def test_send_head_missing_file_triggers_404(tmp_path):
+    handler = _ReloadHandler.__new__(_ReloadHandler)
+    handler.path = "/missing.html"
+    handler.directory = str(tmp_path)
+    handler.command = "GET"
+    handler.request_version = "HTTP/1.1"
+    handler.server_version = ""
+    handler.sys_version = ""
+    handler._headers_buffer = []
+    handler.headers = {}
+    handler.rfile = io.BytesIO(b"")
+    handler.wfile = io.BytesIO()
+
+    called = {}
+    handler.send_response = lambda *args, **kwargs: called.setdefault("resp", []).append(args[0])
+    handler.send_header = lambda *args, **kwargs: None
+    handler.end_headers = lambda: None
+
+    def send_error(code, message=None):
+        called["error"] = code
+
+    handler.send_error = send_error
+    result = _ReloadHandler.send_head(handler)
+    assert result is None
+    assert called["error"] == 404
+
+
+def test_directory_without_index_returns_404(tmp_path):
+    posts = tmp_path / "posts"
+    posts.mkdir()
+    (posts / "note.txt").write_text("hi", encoding="utf-8")
+
+    handler = _ReloadHandler.__new__(_ReloadHandler)
+    handler.path = "/posts/"
+    handler.directory = str(tmp_path)
+    handler.command = "GET"
+    handler.request_version = "HTTP/1.1"
+    handler.server_version = ""
+    handler.sys_version = ""
+    handler._headers_buffer = []
+    handler.headers = {}
+    handler.rfile = io.BytesIO(b"")
+    handler.wfile = io.BytesIO()
+
+    called = {}
+
+    def fake_send_error(code, message=None):
+        called["error"] = code
+
+    handler.send_response = lambda code, message=None: called.setdefault("responses", []).append(code)
+    handler.send_header = lambda *args, **kwargs: None
+    handler.end_headers = lambda: None
+    handler.send_error = fake_send_error
+
+    result = _ReloadHandler.send_head(handler)
+    assert called["error"] == 404
+    assert result is None

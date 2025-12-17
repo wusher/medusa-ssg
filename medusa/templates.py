@@ -15,6 +15,7 @@ from typing import Any, Iterable
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 
 from .content import Page
+from .collections import PageCollection, TagCollection
 
 
 class TemplateEngine:
@@ -61,13 +62,16 @@ class TemplateEngine:
     def update_collections(
         self, pages: Iterable[Page], tags: dict[str, list[Page]]
     ) -> None:
-        self.pages = pages
-        self.tags = tags
-        self.env.globals["pages"] = pages
-        self.env.globals["tags"] = tags
+        self.pages = PageCollection(pages)
+        self.tags = TagCollection(tags)
+        self.env.globals["pages"] = self.pages
+        self.env.globals["tags"] = self.tags
 
     def _url_for(self, path: str) -> str:
         if path.startswith(("http://", "https://", "//")):
+            return path
+        # Always keep asset URLs relative to avoid cross-origin issues during dev.
+        if path.startswith("/assets"):
             return path
         base = self.data.get("url", "") if isinstance(self.data, dict) else ""
         prefix = base.rstrip("/") if base else ""
@@ -84,7 +88,11 @@ class TemplateEngine:
         }
         body_html = self._render_body(page, context)
         layout_template = self._resolve_layout_template(page.layout)
-        return layout_template.render(page_content=body_html, **context)
+        try:
+            return layout_template.render(page_content=body_html, **context)
+        except TemplateNotFound as exc:
+            print(f"Template not found during render ({exc}); rendering body only.")
+            return body_html
 
     def _render_body(self, page: Page, context: dict[str, Any]) -> str:
         if page.source_type == "jinja":
@@ -99,9 +107,17 @@ class TemplateEngine:
             f"{layout}.html",
             layout,
         ]
+        # If layout isn't "default", also try falling back to default
+        if layout != "default":
+            candidates.extend([
+                "default.html.jinja",
+                "default.jinja",
+                "default.html",
+                "default",
+            ])
         for name in candidates:
             try:
                 return self.env.get_template(name)
             except TemplateNotFound:
                 continue
-        return self.env.from_string("{{ page_content }}")
+        return self.env.from_string("{{ page_content | safe }}")

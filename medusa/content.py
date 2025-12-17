@@ -104,7 +104,7 @@ class _ImageRenderer(mistune.HTMLRenderer):
         Args:
             folder: Folder path for image rewriting.
         """
-        super().__init__()
+        super().__init__(escape=False)
         self.folder = folder
 
     def image(self, text: str, url: str | None = None, title: str | None = None):

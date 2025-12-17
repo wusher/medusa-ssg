@@ -94,13 +94,18 @@ class AssetPipeline:
             return
         output_css = self.output_dir / "assets" / "css" / "main.css"
         output_css.parent.mkdir(parents=True, exist_ok=True)
-        tailwind_bin = shutil.which("tailwindcss")
+        tailwind_bin = self._find_executable("tailwindcss")
         if not tailwind_bin:
             print("Tailwind CSS CLI not found; skipping CSS build.")
+            print(
+                "Install with `npm install -g tailwindcss` or `npm install -D tailwindcss` in the project. "
+                "Falling back to unprocessed CSS."
+            )
+            shutil.copy2(input_css, output_css)
             return
         content_globs = [
             str(self.project_root / "site" / "**" / "*.md"),
-            str(self.project_root / "site" / "**" / "*.html.jinja"),
+            str(self.project_root / "site" / "**" / "*.jinja"),
             str(self.project_root / "assets" / "**" / "*.js"),
         ]
         cmd = [
@@ -116,6 +121,8 @@ class AssetPipeline:
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print("Tailwind build failed:", result.stderr.strip())
+            # fallback to unprocessed CSS to avoid missing file during dev
+            shutil.copy2(input_css, output_css)
 
     def _minify_js(self) -> None:
         """Minify JavaScript files using rjsmin.
@@ -123,14 +130,33 @@ class AssetPipeline:
         Processes all .js files in the assets directory and writes minified
         versions to the output directory. Requires rjsmin to be installed.
         """
-        if jsmin is None:
-            return
         target = self.output_dir / "assets"
         for js_file in self.assets_dir.rglob("*.js"):
             rel = js_file.relative_to(self.assets_dir)
             dest = target / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            with open(js_file, "r", encoding="utf-8") as f_in:
-                minified = jsmin(f_in.read())
-            with open(dest, "w", encoding="utf-8") as f_out:
-                f_out.write(minified)
+            if jsmin:
+                with open(js_file, "r", encoding="utf-8") as f_in:
+                    minified = jsmin(f_in.read())
+                with open(dest, "w", encoding="utf-8") as f_out:
+                    f_out.write(minified)
+                continue
+
+            terser = self._find_executable("terser")
+            if terser:
+                result = subprocess.run([terser, str(js_file), "-c", "-m", "-o", str(dest)], capture_output=True, text=True)
+                if result.returncode != 0:
+                    print("JS minification failed via terser:", result.stderr.strip())
+                    shutil.copy2(js_file, dest)
+                continue
+
+            shutil.copy2(js_file, dest)
+
+    def _find_executable(self, name: str) -> str | None:
+        found = shutil.which(name)
+        if found:
+            return found
+        local = self.project_root / "node_modules" / ".bin" / name
+        if local.exists():
+            return str(local)
+        return None

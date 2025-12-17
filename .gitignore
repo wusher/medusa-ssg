@@ -19,3 +19,10 @@ dist/
 
 # Project output
 output/
+
+# Node
+node_modules/
+package-lock.json
+
+# Design assets
+design/

@@ -1,18 +1,22 @@
 """Development server for Medusa.
 
-This module provides a development server with live reload functionality.
-It serves the built site over HTTP and uses WebSockets to notify clients of changes.
+Serves the built site with live reload and sane defaults for local authoring:
+- Injects a reload script into HTML responses.
+- Rejects directory listings and missing paths with a 404 (serving 404.html when present).
+- Watches source folders and triggers rebuilds plus client reloads.
 
 Key classes:
 - DevServer: Main class for running the development server.
-- _ReloadHandler: HTTP request handler that injects reload script.
+- _ReloadHandler: HTTP request handler that injects reload script and enforces 404s.
 - _ChangeHandler: File system event handler for triggering rebuilds.
 """
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
+import os
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -50,10 +54,45 @@ class _ReloadHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         super().end_headers()
 
+    def list_directory(self, path):  # pragma: no cover - exercised via send_head
+        # Never expose directory listings; treat as missing content.
+        return self._serve_404()
+
+    def _serve_404(self):
+        """Serve 404.html (when present) with injected reload script and a 404 status."""
+        error_page = Path(self.directory) / "404.html"
+        if error_page.exists():
+            content = error_page.read_text(encoding="utf-8")
+            if "</body>" in content:
+                content = content.replace("</body>", f"{self.reload_script}</body>")
+            else:
+                content += self.reload_script
+            encoded = content.encode("utf-8")
+            self.send_response(404)
+            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return None
+        self.send_error(404, "File not found")
+        return None
+
     def send_head(self):
         path = self.translate_path(self.path)
-        if path.endswith(".html") and Path(path).exists():
-            content = Path(path).read_text(encoding="utf-8")
+        # Check if path exists (file or directory with index.html)
+        path_obj = Path(path)
+        if path_obj.is_dir():
+            index_path = path_obj / "index.html"
+            if index_path.exists():
+                path = str(index_path)
+                path_obj = index_path
+            else:
+                return self._serve_404()
+        elif not path_obj.exists():
+            return self._serve_404()
+
+        if path.endswith(".html"):
+            content = path_obj.read_text(encoding="utf-8")
             if "</body>" in content:
                 content = content.replace("</body>", f"{self.reload_script}</body>")
             else:
@@ -82,25 +121,41 @@ class DevServer:
         _loop: Event loop for WebSocket handling.
     """
 
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path, http_port: int | None = None, ws_port: int | None = None):
         """Initialize the development server.
 
         Args:
             project_root: Root directory of the project.
+            http_port: Optional override for HTTP port.
         """
         self.project_root = project_root
         self.config = load_config(project_root)
         self.output_dir = project_root / self.config.get("output_dir", "output")
-        self.ws_port = self.config.get("ws_port", 4001)
-        self.http_port = int(self.config.get("port", 4000))
+        base_http = int(http_port or self.config.get("port", 4000))
+        resolved_ws = (
+            ws_port
+            if ws_port is not None
+            else (
+                base_http + 1
+                if http_port is not None
+                else self.config.get("ws_port", base_http + 1)
+            )
+        )
+        self.ws_port = resolved_ws
+        self.http_port = base_http
         self._observer: Observer | None = None
         self._ws_clients: set = set()
         self._loop = asyncio.new_event_loop()
+        self._rebuilding = False
+        self._last_rebuild_at = 0.0
+        self._last_signature: tuple | None = None
+        self._debounce_seconds = 0.05
 
     def start(
         self, include_drafts: bool = False
     ) -> None:  # pragma: no cover - integration path
         build_site(self.project_root, include_drafts=include_drafts)
+        self._last_signature = self._compute_signature()
         threading.Thread(target=self._start_http, daemon=True).start()
         threading.Thread(target=self._start_ws, daemon=True).start()
         self._start_watcher(include_drafts)
@@ -117,17 +172,22 @@ class DevServer:
         self._loop.call_soon_threadsafe(self._loop.stop)
 
     def _start_http(self) -> None:  # pragma: no cover - integration path
-        handler = _ReloadHandler
-        handler.directory = str(self.output_dir)
+        handler = functools.partial(_ReloadHandler, directory=str(self.output_dir))
         httpd = ThreadingHTTPServer(("", self.http_port), handler)
         print(f"Serving {self.output_dir} at http://localhost:{self.http_port}")
         httpd.serve_forever()
 
     def _start_ws(self) -> None:  # pragma: no cover - integration path
         asyncio.set_event_loop(self._loop)
-        start_server = websockets.serve(self._ws_handler, "0.0.0.0", self.ws_port)
-        self._loop.run_until_complete(start_server)
-        self._loop.run_forever()
+        try:
+            self._loop.run_until_complete(self._run_ws_server())
+        except OSError as exc:
+            print(f"WebSocket server failed to start (port {self.ws_port}): {exc}")
+            return
+
+    async def _run_ws_server(self) -> None:  # pragma: no cover - integration path
+        async with websockets.serve(self._ws_handler, "0.0.0.0", self.ws_port):
+            await asyncio.Future()  # Run forever
 
     async def _ws_handler(self, websocket):
         self._ws_clients.add(websocket)
@@ -162,9 +222,38 @@ class DevServer:
         self._observer = observer
 
     def rebuild(self, include_drafts: bool) -> None:
-        print("Change detected; rebuilding...")
-        build_site(self.project_root, include_drafts=include_drafts)
-        self._broadcast_reload()
+        now = time.time()
+        if self._rebuilding or (now - self._last_rebuild_at) < self._debounce_seconds:
+            return
+        signature = self._compute_signature()
+        if signature is not None and signature == self._last_signature:
+            return
+        self._rebuilding = True
+        try:
+            print("Change detected; rebuilding...")
+            build_site(self.project_root, include_drafts=include_drafts)
+            self._last_signature = signature
+            self._broadcast_reload()
+        finally:
+            self._rebuilding = False
+            self._last_rebuild_at = time.time()
+
+    def _compute_signature(self) -> tuple | None:
+        entries: list[tuple] = []
+        for folder in ["site", "assets", "data"]:
+            root = self.project_root / folder
+            if not root.exists():
+                continue
+            for path in sorted(root.rglob("*")):
+                if path.is_dir():
+                    continue
+                try:
+                    stat = path.stat()
+                except OSError:
+                    continue
+                rel = path.relative_to(self.project_root)
+                entries.append((str(rel), stat.st_mtime_ns, stat.st_size))
+        return tuple(entries) if entries else None
 
 
 class _ChangeHandler(FileSystemEventHandler):
@@ -177,6 +266,12 @@ class _ChangeHandler(FileSystemEventHandler):
         if event.is_directory:
             return
         path = Path(event.src_path)
-        if self.server.output_dir in path.parents or path == self.server.output_dir:
+        # Skip changes in output directory
+        try:
+            path.relative_to(self.server.output_dir)
+            return  # Path is inside output_dir, skip
+        except ValueError:
+            pass  # Path is not inside output_dir, continue
+        if "node_modules" in path.parts:
             return
         self.server.rebuild(self.include_drafts)

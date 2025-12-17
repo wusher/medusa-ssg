@@ -26,6 +26,9 @@ def create_site(tmp_path: Path) -> Path:
     (site / "raw.html.jinja").write_text('<img src="inline.png">', encoding="utf-8")
     (site / "_hidden" / "secret.md").write_text("# Secret", encoding="utf-8")
     (site / "notes.txt").write_text("ignore", encoding="utf-8")
+    (site / "rich.md").write_text(
+        "# Rich\n\n<div class=\"hero\"><span>HTML stays</span></div>\n", encoding="utf-8"
+    )
     return site
 
 
@@ -55,6 +58,9 @@ def test_content_processing_builds_pages(tmp_path):
 
     raw = next(p for p in pages if p.filename == "raw.html.jinja")
     assert "/assets/images/inline.png" in raw.content
+
+    rich = next(p for p in pages if p.filename == "rich.md")
+    assert '<div class="hero"><span>HTML stays</span></div>' in rich.content
 
 
 def test_include_drafts_and_url_rules(tmp_path):

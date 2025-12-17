@@ -49,8 +49,65 @@ def test_asset_pipeline_runs_without_tailwind(monkeypatch, tmp_path):
         return None
 
     monkeypatch.setattr(shutil, "which", fake_which)
+    # also simulate node_modules/.bin missing
+    (project / "node_modules" / ".bin").mkdir(parents=True, exist_ok=True)
     pipeline._process_tailwind()
     assert calls["which"] == "tailwindcss"
+
+    # simulate node_modules binary present
+    tailwind_bin = project / "node_modules" / ".bin" / "tailwindcss"
+    tailwind_bin.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+    seen = {}
+
+    def fake_run(cmd, capture_output=None, text=None):
+        seen["bin"] = cmd[0]
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    pipeline._process_tailwind()
+    assert seen["bin"] == str(tailwind_bin)
+
+
+def test_js_minify_prefers_terser(monkeypatch, tmp_path):
+    project = create_project(tmp_path)
+    output = project / "out"
+    pipeline = AssetPipeline(project, output)
+    monkeypatch.setattr("medusa.assets.jsmin", None)
+
+    terser_bin = project / "node_modules" / ".bin" / "terser"
+    terser_bin.parent.mkdir(parents=True, exist_ok=True)
+    terser_bin.write_text("#!/bin/sh\necho terser\n", encoding="utf-8")
+
+    calls = {}
+
+    def fake_run(cmd, capture_output=None, text=None):
+        calls["cmd"] = cmd
+        dest_index = cmd.index("-o") + 1
+        Path(cmd[dest_index]).write_text("minified", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    pipeline._minify_js()
+    assert calls["cmd"][0] == str(terser_bin)
+
+
+def test_js_minify_terser_failure(monkeypatch, tmp_path, capsys):
+    project = create_project(tmp_path)
+    output = project / "out"
+    pipeline = AssetPipeline(project, output)
+    monkeypatch.setattr("medusa.assets.jsmin", None)
+
+    terser_bin = project / "node_modules" / ".bin" / "terser"
+    terser_bin.parent.mkdir(parents=True, exist_ok=True)
+    terser_bin.write_text("#!/bin/sh\necho terser\n", encoding="utf-8")
+
+    def fake_run(cmd, capture_output=None, text=None):
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="fail")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    pipeline._minify_js()
+    out = capsys.readouterr()
+    assert "JS minification failed via terser" in out.out
 
 
 def test_asset_pipeline_with_tailwind(monkeypatch, tmp_path):
@@ -113,6 +170,7 @@ def test_tailwind_failure(monkeypatch, tmp_path, capsys):
     pipeline._process_tailwind()
     captured = capsys.readouterr()
     assert "Tailwind build failed" in captured.out
+    assert (output / "assets" / "css" / "main.css").exists()
 
 
 def test_minify_js_skips_when_missing(monkeypatch, tmp_path):
@@ -121,8 +179,9 @@ def test_minify_js_skips_when_missing(monkeypatch, tmp_path):
     pipeline = AssetPipeline(project, output)
     monkeypatch.setattr("medusa.assets.jsmin", None)
     pipeline._minify_js()
-    # no files should be written because jsmin is unavailable
-    assert not (output / "assets").exists()
+    js_out = output / "assets" / "js" / "main.js"
+    assert js_out.exists()
+    assert "return 1 + 1" in js_out.read_text()
 
 
 def test_build_site_creates_output(monkeypatch, tmp_path):
@@ -142,6 +201,22 @@ def test_build_site_creates_output(monkeypatch, tmp_path):
     data = load_data(project)
     assert config["output_dir"] == "output"
     assert data["title"] == "Test"
+
+
+def test_build_copies_plain_html(tmp_path):
+    project = create_project(tmp_path)
+    static_html = project / "site" / "static" / "plain.html"
+    static_html.parent.mkdir(parents=True, exist_ok=True)
+    static_html.write_text("<html><body>plain</body></html>", encoding="utf-8")
+    hidden_html = project / "site" / "_hidden" / "secret.html"
+    hidden_html.parent.mkdir(parents=True, exist_ok=True)
+    hidden_html.write_text("<html>secret</html>", encoding="utf-8")
+
+    result = build_site(project, include_drafts=False)
+    out_file = result.output_dir / "static" / "plain.html"
+    assert out_file.exists()
+    assert "plain" in out_file.read_text(encoding="utf-8")
+    assert not (result.output_dir / "_hidden" / "secret.html").exists()
 
 
 def test_build_helpers_handle_missing(monkeypatch, tmp_path):

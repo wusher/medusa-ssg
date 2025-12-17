@@ -37,6 +37,28 @@ def test_first_paragraph_and_wrapping(tmp_path):
     utils.ensure_clean_dir(target)
     assert list(target.iterdir()) == []
 
+    # fallback deletion path when rmtree is ineffective
+    nested = tmp_path / "stubborn"
+    nested.mkdir()
+    subdir = nested / "inner"
+    subdir.mkdir()
+    (subdir / "file.txt").write_text("data", encoding="utf-8")
+    original_rmtree = utils.shutil.rmtree
+
+    def fake_rmtree(path, ignore_errors=False):
+        return None  # does nothing so fallback is used
+
+    utils.shutil.rmtree = fake_rmtree
+    try:
+        utils.ensure_clean_dir(nested)
+    finally:
+        utils.shutil.rmtree = original_rmtree
+    assert nested.exists() and list(nested.iterdir()) == []
+
+    missing = tmp_path / "missing-dir"
+    utils.ensure_clean_dir(missing)
+    assert missing.exists()
+
 
 def test_path_helpers_and_tags_index(tmp_path):
     path = Path("site/_partials/header.html.jinja")

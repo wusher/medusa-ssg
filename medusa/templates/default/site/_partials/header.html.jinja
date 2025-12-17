@@ -1,0 +1,12 @@
+<header class="border-b border-slate-200 bg-white/90 backdrop-blur">
+  <div class="container mx-auto px-6 max-w-5xl h-16 flex items-center justify-between">
+    <a href="/" class="text-xl font-bold bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+      {{ data.title }}
+    </a>
+    <nav class="flex items-center space-x-6">
+      {% for item in data.nav %}
+        <a href="{{ item.url }}" class="text-sm font-semibold text-slate-700 hover:text-slate-900 transition-colors">{{ item.label }}</a>
+      {% endfor %}
+    </nav>
+  </div>
+</header>

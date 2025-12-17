@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ current_page.title }} | {{ data.title }}</title>
+  <meta name="description" content="{{ current_page.description or data.description or '' }}">
+  <link rel="stylesheet" href="{{ url_for('/assets/css/main.css') }}">
+</head>
+<body class="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100">
+  {% include "header.html.jinja" %}
+  <main class="flex-1 py-12">
+    <div class="container mx-auto px-6 max-w-5xl">
+      <article class="prose prose-lg prose-slate max-w-none prose-headings:font-bold prose-a:text-teal-600 prose-a:no-underline hover:prose-a:underline">
+        {{ page_content | safe }}
+      </article>
+    </div>
+  </main>
+  {% include "footer.html.jinja" %}
+  <script src="{{ url_for('/assets/js/main.js') }}"></script>
+</body>
+</html>

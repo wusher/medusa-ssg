@@ -1,0 +1,113 @@
+<div class="not-prose space-y-12 -mt-6">
+  <section class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-teal-800 px-8 py-8 md:px-12 md:py-10 shadow-lg">
+    <div class="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.18),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.12),transparent_40%)]"></div>
+    <div class="relative max-w-3xl space-y-6">
+      <p class="inline-flex px-3 py-1 text-xs font-semibold tracking-wide uppercase rounded-full bg-white/10 text-white/80 ring-1 ring-white/20">
+        Minimal by default
+      </p>
+      <h1 class="text-4xl md:text-5xl font-black text-white leading-tight">
+        Launch a polished static site in minutes.
+      </h1>
+      <p class="text-lg text-white/80 max-w-2xl">
+        Markdown for content. Jinja2 for layouts. Tailwind for styling. Medusa handles the rest—pretty URLs, live reload, and builds with zero config.
+      </p>
+      <div class="flex flex-wrap items-center gap-3">
+        <a href="/posts/" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white text-slate-900 font-semibold shadow-sm hover:shadow transition">
+          Read posts
+        </a>
+        <a href="/about/" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-white/40 text-white font-semibold hover:bg-white/10 transition">
+          Learn more
+        </a>
+        <span class="text-sm text-white/60">Edit <code class="bg-white/10 px-2 py-1 rounded font-mono">site/index.jinja</code> to customize.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid gap-6 md:grid-cols-2">
+    <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+      <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+        <span class="font-semibold text-slate-900">Content</span>
+        <span class="text-xs text-slate-400 font-mono">site/posts/</span>
+      </div>
+      <pre class="text-[15px] bg-slate-900 text-slate-100 p-5 leading-7 overflow-auto font-mono">{% raw %}site/posts/2024-01-01-hello.md
+
+# Hello World
+Welcome to Medusa!{% endraw %}</pre>
+      <div class="px-5 py-3 text-sm text-slate-500">
+        Markdown files become pages. Folder structure defines URLs.
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+      <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+        <span class="font-semibold text-slate-900">Loop Pages</span>
+        <span class="text-xs text-slate-400 font-mono">template.jinja</span>
+      </div>
+      <pre class="text-[15px] bg-slate-900 text-slate-100 p-5 leading-7 overflow-auto font-mono">{% raw %}{% for post in pages.group("posts") %}
+  &lt;a href="{{ post.url }}"&gt;
+    {{ post.title }}
+  &lt;/a&gt;
+{% endfor %}{% endraw %}</pre>
+      <div class="px-5 py-3 text-sm text-slate-500">
+        Access all pages via <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">pages</code>. Group by folder, filter, sort.
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+      <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+        <span class="font-semibold text-slate-900">Tags Overview</span>
+        <span class="text-xs text-slate-400 font-mono">template.jinja</span>
+      </div>
+      <pre class="text-[15px] bg-slate-900 text-slate-100 p-5 leading-7 overflow-auto font-mono">{% raw %}{% for tag, posts in tags.items() %}
+  &lt;a href="/tags/{{ tag }}/"&gt;
+    {{ tag }} ({{ posts|length }})
+  &lt;/a&gt;
+{% endfor %}{% endraw %}</pre>
+      <div class="px-5 py-3 text-sm text-slate-500">
+        Tags are auto-collected from frontmatter. Loop and display.
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+      <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+        <span class="font-semibold text-slate-900">Posts by Tag</span>
+        <span class="text-xs text-slate-400 font-mono">template.jinja</span>
+      </div>
+      <pre class="text-[15px] bg-slate-900 text-slate-100 p-5 leading-7 overflow-auto font-mono">{% raw %}{% for post in tags.get("python", []) %}
+  &lt;a href="{{ post.url }}"&gt;
+    {{ post.title }}
+  &lt;/a&gt;
+{% endfor %}{% endraw %}</pre>
+      <div class="px-5 py-3 text-sm text-slate-500">
+        Filter posts by tag. Chain with <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">.latest(5)</code> to limit.
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+      <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+        <span class="font-semibold text-slate-900">Partials</span>
+        <span class="text-xs text-slate-400 font-mono">_partials/</span>
+      </div>
+      <pre class="text-[15px] bg-slate-900 text-slate-100 p-5 leading-7 overflow-auto font-mono">{% raw %}&lt;div class="card"&gt;
+  {{ title }}
+&lt;/div&gt;
+
+{% include "card.html.jinja" %}{% endraw %}</pre>
+      <div class="px-5 py-3 text-sm text-slate-500">
+        Reusable components. Define once, include anywhere.
+      </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+      <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+        <span class="font-semibold text-slate-900">Build & Serve</span>
+        <span class="text-xs text-slate-400 font-mono">terminal</span>
+      </div>
+      <pre class="text-[15px] bg-slate-900 text-slate-100 p-5 leading-7 overflow-auto font-mono">medusa serve --drafts
+medusa build</pre>
+      <div class="px-5 py-3 text-sm text-slate-500">
+        Live reload dev server. Production build when ready.
+      </div>
+    </div>
+  </section>
+</div>

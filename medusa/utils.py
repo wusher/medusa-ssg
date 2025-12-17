@@ -84,13 +84,24 @@ def first_paragraph(text: str, limit: int = 160) -> str:
     if not paragraphs:
         return ""
     para = paragraphs[0].lstrip("# ").strip()
+    # Strip HTML tags and Jinja syntax
+    para = re.sub(r"<[^>]+>", "", para)
+    para = re.sub(r"\{[%#{].*?[%#}]\}", "", para)
     collapsed = " ".join(para.split())
     return collapsed[:limit]
 
 
 def ensure_clean_dir(path: Path) -> None:
     if path.exists():
-        shutil.rmtree(path)
+        shutil.rmtree(str(path), ignore_errors=True)
+        if path.exists():
+            # Fallback for stubborn directories
+            for item in path.rglob("*"):
+                if item.is_file():
+                    item.unlink()
+            for item in sorted([p for p in path.rglob("*") if p.is_dir()], reverse=True):
+                item.rmdir()
+            path.rmdir()
     path.mkdir(parents=True, exist_ok=True)
 
 

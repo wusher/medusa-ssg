@@ -14,6 +14,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+import json
+import os
+import shutil
+import subprocess
+
+
+# Path to the default template directory
+_TEMPLATES_DIR = Path(__file__).parent / "templates" / "default"
 
 
 @click.group()
@@ -47,17 +55,30 @@ def build(drafts: bool):
 
 @cli.command()
 @click.option("--drafts", is_flag=True, help="Include draft content")
-def serve(drafts: bool):
+@click.option(
+    "--port",
+    type=int,
+    required=False,
+    help="Port to run the dev server (overrides medusa.yaml)",
+)
+@click.option(
+    "--ws-port",
+    type=int,
+    required=False,
+    help="Port for the live reload websocket server (overrides medusa.yaml ws_port)",
+)
+def serve(drafts: bool, port: int | None, ws_port: int | None):
     """Run dev server with live reload."""
     project_root = Path.cwd()
     from .server import DevServer
 
-    server = DevServer(project_root)
+    server = DevServer(project_root, http_port=port, ws_port=ws_port)
     server.start(include_drafts=drafts)
 
 
 def main():
     """Entry point for the CLI application."""
+    cli()
 
 
 def _scaffold(root: Path) -> None:
@@ -66,105 +87,50 @@ def _scaffold(root: Path) -> None:
     Args:
         root: Root directory for the new project.
     """
-    (root / "site" / "_layouts").mkdir(parents=True, exist_ok=True)
-    (root / "site" / "_partials").mkdir(parents=True, exist_ok=True)
-    (root / "site" / "posts").mkdir(parents=True, exist_ok=True)
-    (root / "assets" / "css").mkdir(parents=True, exist_ok=True)
-    (root / "assets" / "js").mkdir(parents=True, exist_ok=True)
-    (root / "assets" / "images").mkdir(parents=True, exist_ok=True)
-    (root / "data").mkdir(parents=True, exist_ok=True)
+    # Copy template directory contents to new project
+    for src_path in _TEMPLATES_DIR.rglob("*"):
+        if src_path.is_dir():
+            continue
+        rel_path = src_path.relative_to(_TEMPLATES_DIR)
+        dest_path = root / rel_path
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_path, dest_path)
 
-    (root / "medusa.yaml").write_text(
-        "output_dir: output\nport: 4000\n", encoding="utf-8"
+    # Generate package.json with project name
+    package_json = {
+        "name": root.name,
+        "private": True,
+        "scripts": {
+            "build:css": "tailwindcss -i assets/css/main.css -o output/assets/css/main.css --minify",
+        },
+        "devDependencies": {
+            "@tailwindcss/typography": "^0.5.15",
+            "tailwindcss": "^3.4.13",
+            "terser": "^5.36.0",
+        },
+    }
+    (root / "package.json").write_text(
+        json.dumps(package_json, indent=2) + "\n", encoding="utf-8"
     )
 
-    (root / "data" / "site.yaml").write_text(
-        "title: My Medusa Site\nurl: https://example.com\nauthor: Jane Doe\n",
-        encoding="utf-8",
-    )
-    (root / "data" / "nav.yaml").write_text(
-        "- label: Home\n  url: /\n- label: About\n  url: /about/\n- label: Posts\n  url: /posts/\n",
-        encoding="utf-8",
-    )
+    _try_npm_install(root)
 
-    (root / "assets" / "css" / "main.css").write_text(
-        "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\nbody { @apply bg-gray-50 text-gray-900; }\n",
-        encoding="utf-8",
-    )
-    (root / "assets" / "js" / "main.js").write_text(
-        "console.log('Medusa ready');\n", encoding="utf-8"
-    )
 
-    (root / "site" / "_layouts" / "default.html.jinja").write_text(
-        """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ current_page.title }} | {{ data.title }}</title>
-  <link rel="stylesheet" href="{{ url_for('/assets/css/main.css') }}">
-</head>
-<body class="min-h-screen flex flex-col">
-  {% include "header.html.jinja" %}
-  <main class="container mx-auto px-6 py-10 flex-1">
-    {{ page_content | safe }}
-  </main>
-  {% include "footer.html.jinja" %}
-</body>
-</html>
-""",
-        encoding="utf-8",
-    )
-
-    (root / "site" / "_partials" / "header.html.jinja").write_text(
-        """<header class="border-b border-gray-200 bg-white">
-  <div class="container mx-auto px-6 py-4 flex items-center justify-between">
-    <a href="/" class="text-lg font-semibold">{{ data.title }}</a>
-    <nav class="space-x-4 text-sm">
-      {% for item in data.nav %}
-        <a href="{{ item.url }}" class="text-gray-700 hover:text-black">{{ item.label }}</a>
-      {% endfor %}
-    </nav>
-  </div>
-</header>
-""",
-        encoding="utf-8",
-    )
-
-    (root / "site" / "_partials" / "footer.html.jinja").write_text(
-        """<footer class="border-t border-gray-200 bg-white">
-  <div class="container mx-auto px-6 py-6 text-sm text-gray-600">
-    © {{ data.title }} — Built with Medusa.
-  </div>
-</footer>
-""",
-        encoding="utf-8",
-    )
-
-    (root / "site" / "index.md").write_text(
-        """# Welcome to Medusa
-
-This is your brand new site. Edit `site/index.md` to get started.
-
-Check out the #posts for updates and follow along.
-""",
-        encoding="utf-8",
-    )
-
-    (root / "site" / "about.md").write_text(
-        """# About
-
-Medusa is a minimal static site generator using Markdown and Jinja2.
-""",
-        encoding="utf-8",
-    )
-
-    (root / "site" / "posts" / "2024-01-15-my-post.md").write_text(
-        """# First Post
-
-This is your first post powered by Medusa. Add more markdown files in `site/posts/`.
-
-Happy #writing!
-""",
-        encoding="utf-8",
-    )
+def _try_npm_install(root: Path) -> None:
+    """Attempt to install Node dependencies if npm is available."""
+    if os.environ.get("MEDUSA_SKIP_NPM_INSTALL") == "1":
+        return
+    npm_bin = shutil.which("npm")
+    if not npm_bin:
+        return
+    try:
+        subprocess.run(
+            [npm_bin, "install"],
+            cwd=root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except Exception:
+        # Non-fatal: user can run npm install manually
+        pass

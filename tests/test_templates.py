@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from medusa.content import Page
+from medusa.collections import PageCollection, TagCollection
 from medusa.templates import TemplateEngine
 
 
@@ -34,7 +35,7 @@ def test_template_engine_renders_with_layout(tmp_path):
         source_type="markdown",
     )
 
-    engine.update_collections([page], {"python": [page]})
+    engine.update_collections(PageCollection([page]), {"python": [page]})
     rendered = engine.render_page(page)
     assert "<p>Hi</p>" in rendered
     assert "https://example.com/assets/js/app.js" in rendered
@@ -44,6 +45,7 @@ def test_url_for_without_site_url(tmp_path):
     engine = TemplateEngine(tmp_path, {})
     assert engine._url_for("assets/app.js") == "/assets/app.js"
     assert engine._url_for("http://cdn.com/lib.js") == "http://cdn.com/lib.js"
+    assert engine._url_for("/assets/css/main.css") == "/assets/css/main.css"
 
 
 def test_render_body_jinja_and_layout_fallback(tmp_path):
@@ -67,6 +69,36 @@ def test_render_body_jinja_and_layout_fallback(tmp_path):
         filename="inline.html.jinja",
         source_type="jinja",
     )
-    engine.update_collections([page], {})
+    engine.update_collections(PageCollection([page]), {})
     rendered = engine.render_page(page)
     assert "Inline" in rendered
+
+
+def test_missing_partial_falls_back(tmp_path, capsys):
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{% include 'missing.html.jinja' %}{{ page_content }}", encoding="utf-8"
+    )
+    engine = TemplateEngine(site, {})
+    page = Page(
+        title="T",
+        body="b",
+        content="<p>body</p>",
+        description="",
+        url="/",
+        slug="",
+        date=datetime.now(timezone.utc),
+        tags=[],
+        draft=False,
+        layout="default",
+        group="",
+        path=site / "index.md",
+        folder="",
+        filename="index.md",
+        source_type="markdown",
+    )
+    engine.update_collections([page], {})
+    out = engine.render_page(page)
+    assert "body" in out
+    assert "missing.html.jinja" in capsys.readouterr().out
