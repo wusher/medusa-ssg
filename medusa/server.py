@@ -17,6 +17,7 @@ import asyncio
 import functools
 import json
 import os
+import shutil
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -37,17 +38,18 @@ class _ReloadHandler(SimpleHTTPRequestHandler):
         reload_script: JavaScript code for WebSocket connection to trigger reloads.
     """
 
-    reload_script = """
+    reload_script_template = """
     <script>
-    (() => {
-      const ws = new WebSocket('ws://' + location.hostname + ':4001');
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data || '{}');
+    (() => {{
+      const ws = new WebSocket('ws://' + location.hostname + ':{ws_port}');
+      ws.onmessage = (event) => {{
+        const data = JSON.parse(event.data || '{{}}');
         if (data.type === 'reload') location.reload();
-      };
-    })();
+      }};
+    }})();
     </script>
     """
+    reload_script = reload_script_template.format(ws_port=4001)
 
     def end_headers(self):
         # Ensure CORS for dev
@@ -131,6 +133,7 @@ class DevServer:
         self.project_root = project_root
         self.config = load_config(project_root)
         self.output_dir = project_root / self.config.get("output_dir", "output")
+        self._staging_dir = self.output_dir.with_suffix(self.output_dir.suffix + ".staging")
         base_http = int(http_port or self.config.get("port", 4000))
         resolved_ws = (
             ws_port
@@ -143,6 +146,7 @@ class DevServer:
         )
         self.ws_port = resolved_ws
         self.http_port = base_http
+        self._reload_script = _ReloadHandler.reload_script_template.format(ws_port=self.ws_port)
         # Dev server always uses local root_url for absolute asset/page URLs.
         self._root_url = f"http://localhost:{self.http_port}"
         self._observer: Observer | None = None
@@ -152,11 +156,20 @@ class DevServer:
         self._last_rebuild_at = 0.0
         self._last_signature: tuple | None = None
         self._debounce_seconds = 0.05
+        self._post_build_delay = 0.05
 
     def start(
         self, include_drafts: bool = False
     ) -> None:  # pragma: no cover - integration path
-        build_site(self.project_root, include_drafts=include_drafts, root_url=self._root_url)
+        staging = self._prepare_staging_dir()
+        build_site(
+            self.project_root,
+            include_drafts=include_drafts,
+            root_url=self._root_url,
+            clean_output=True,
+            output_dir_override=staging,
+        )
+        self._activate_staging(staging)
         self._last_signature = self._compute_signature()
         threading.Thread(target=self._start_http, daemon=True).start()
         threading.Thread(target=self._start_ws, daemon=True).start()
@@ -174,7 +187,12 @@ class DevServer:
         self._loop.call_soon_threadsafe(self._loop.stop)
 
     def _start_http(self) -> None:  # pragma: no cover - integration path
-        handler = functools.partial(_ReloadHandler, directory=str(self.output_dir))
+        handler_cls = type(
+            "_ReloadHandlerWithPort",
+            (_ReloadHandler,),
+            {"reload_script": self._reload_script},
+        )
+        handler = functools.partial(handler_cls, directory=str(self.output_dir))
         httpd = ThreadingHTTPServer(("", self.http_port), handler)
         print(f"Serving {self.output_dir} at http://localhost:{self.http_port}")
         httpd.serve_forever()
@@ -219,6 +237,7 @@ class DevServer:
             watch_path = self.project_root / folder
             if watch_path.exists():
                 observer.schedule(handler, str(watch_path), recursive=True)
+        # Watch root for tailwind.config.js and other config files
         observer.schedule(handler, str(self.project_root), recursive=False)
         observer.start()
         self._observer = observer
@@ -233,8 +252,18 @@ class DevServer:
         self._rebuilding = True
         try:
             print("Change detected; rebuilding...")
-            build_site(self.project_root, include_drafts=include_drafts, root_url=self._root_url)
+            staging = self._prepare_staging_dir()
+            build_site(
+                self.project_root,
+                include_drafts=include_drafts,
+                root_url=self._root_url,
+                clean_output=True,
+                output_dir_override=staging,
+            )
+            self._activate_staging(staging)
             self._last_signature = signature
+            if self._post_build_delay:
+                time.sleep(self._post_build_delay)
             self._broadcast_reload()
         finally:
             self._rebuilding = False
@@ -257,6 +286,18 @@ class DevServer:
                 entries.append((str(rel), stat.st_mtime_ns, stat.st_size))
         return tuple(entries) if entries else None
 
+    def _prepare_staging_dir(self) -> Path:
+        staging = self._staging_dir
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging.mkdir(parents=True, exist_ok=True)
+        return staging
+
+    def _activate_staging(self, staging: Path) -> None:
+        target = self.output_dir
+        # Atomic replace to avoid windows where output is missing.
+        os.replace(staging, target)
+
 
 class _ChangeHandler(FileSystemEventHandler):
     def __init__(self, server: DevServer, include_drafts: bool):
@@ -268,12 +309,18 @@ class _ChangeHandler(FileSystemEventHandler):
         if event.is_directory:
             return
         path = Path(event.src_path)
-        # Skip changes in output directory
-        try:
-            path.relative_to(self.server.output_dir)
-            return  # Path is inside output_dir, skip
-        except ValueError:
-            pass  # Path is not inside output_dir, continue
+        # Skip changes in output/staging directories
+        for ignored in (
+            self.server.output_dir,
+            getattr(self.server, "_staging_dir", None),
+        ):
+            if not ignored:
+                continue
+            try:
+                path.relative_to(ignored)
+                return
+            except ValueError:
+                pass
         if "node_modules" in path.parts:
             return
         self.server.rebuild(self.include_drafts)
