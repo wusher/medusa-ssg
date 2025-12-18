@@ -7,15 +7,18 @@ Commands:
 - new: Scaffold a new Medusa project.
 - build: Build the site into the output directory.
 - serve: Run development server with live reload.
+- md: Create a new markdown file interactively.
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import click
 import json
 import os
+import questionary
 import shutil
 import subprocess
 
@@ -77,6 +80,145 @@ def serve(drafts: bool, port: int | None, ws_port: int | None):
 
     server = DevServer(project_root, http_port=port, ws_port=ws_port)
     server.start(include_drafts=drafts)
+
+
+@cli.command()
+def md():
+    """Create a new markdown file interactively."""
+    project_root = Path.cwd()
+    site_dir = project_root / "site"
+
+    if not site_dir.exists():
+        raise click.ClickException(
+            "No site/ directory found. Run this command from a Medusa project root."
+        )
+
+    # Find all valid content folders (exclude _ prefixed directories)
+    folders = _get_content_folders(site_dir)
+    if not folders:
+        raise click.ClickException(
+            "No content folders found in site/. Create a folder like site/posts/ first."
+        )
+
+    # Let user pick a folder
+    folder = questionary.select(
+        "Select folder:",
+        choices=folders,
+        style=_questionary_style(),
+    ).ask()
+
+    if folder is None:
+        raise click.Abort()
+
+    # Get filename from user
+    name = questionary.text(
+        "Filename (without .md extension):",
+        validate=lambda x: len(x.strip()) > 0 or "Filename cannot be empty",
+        style=_questionary_style(),
+    ).ask()
+
+    if name is None:
+        raise click.Abort()
+
+    name = name.strip()
+
+    # Ask about date prefix
+    add_date = questionary.confirm(
+        "Prefix with today's date? (YYYY-MM-DD-)",
+        default=True,
+        style=_questionary_style(),
+    ).ask()
+
+    if add_date is None:
+        raise click.Abort()
+
+    # Build filename
+    if add_date:
+        date_prefix = datetime.now().strftime("%Y-%m-%d-")
+        filename = f"{date_prefix}{name}.md"
+    else:
+        filename = f"{name}.md"
+
+    # Check for duplicates
+    if folder == ". (root)":
+        target_dir = site_dir
+    else:
+        target_dir = site_dir / folder
+    target_path = target_dir / filename
+
+    if target_path.exists():
+        raise click.ClickException(f"File already exists: {target_path.relative_to(project_root)}")
+
+    # Also check for slug collision (same name with different date)
+    existing_slugs = _get_existing_slugs(target_dir)
+    slug = _extract_slug(filename)
+    if slug in existing_slugs:
+        conflicting = [f for f in target_dir.iterdir() if _extract_slug(f.name) == slug]
+        raise click.ClickException(
+            f"A file with slug '{slug}' already exists: {conflicting[0].name}"
+        )
+
+    # Create the file with a basic template
+    target_dir.mkdir(parents=True, exist_ok=True)
+    title = _titleize(name)
+    content = f"# {title}\n\n"
+    target_path.write_text(content, encoding="utf-8")
+
+    rel_path = target_path.relative_to(project_root)
+    click.echo(f"Created {rel_path}")
+
+
+def _get_content_folders(site_dir: Path) -> list[str]:
+    """Get list of content folders in site directory.
+
+    Returns folders that don't start with _ (excludes _layouts, _partials, etc.)
+    """
+    folders = []
+    for path in site_dir.iterdir():
+        if path.is_dir() and not path.name.startswith("_"):
+            folders.append(path.name)
+    # Sort alphabetically, then add root option at the beginning
+    folders.sort()
+    folders.insert(0, ". (root)")
+    return folders
+
+
+def _get_existing_slugs(folder: Path) -> set[str]:
+    """Get set of existing slugs in a folder."""
+    slugs = set()
+    if folder.exists():
+        for f in folder.iterdir():
+            if f.is_file() and f.suffix == ".md":
+                slugs.add(_extract_slug(f.name))
+    return slugs
+
+
+def _extract_slug(filename: str) -> str:
+    """Extract slug from filename, removing date prefix and extension."""
+    name = Path(filename).stem
+    # Remove date prefix if present (YYYY-MM-DD-)
+    parts = name.split("-")
+    if len(parts) >= 4 and all(p.isdigit() for p in parts[:3]):
+        name = "-".join(parts[3:])
+    return name.lower()
+
+
+def _titleize(name: str) -> str:
+    """Convert filename to title case."""
+    words = name.replace("-", " ").replace("_", " ").split()
+    return " ".join(word.capitalize() for word in words)
+
+
+def _questionary_style():
+    """Return consistent questionary style."""
+    return questionary.Style([
+        ("qmark", "fg:cyan bold"),
+        ("question", "bold"),
+        ("answer", "fg:cyan"),
+        ("pointer", "fg:cyan bold"),
+        ("highlighted", "fg:cyan bold"),
+        ("selected", "fg:cyan"),
+    ])
 
 
 def main():
