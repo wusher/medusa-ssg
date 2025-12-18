@@ -117,3 +117,89 @@ def test_layout_resolution_missing_layouts(tmp_path):
     path.write_text("# Orphan", encoding="utf-8")
     page = processor._build_page(path, draft=False)
     assert page.layout == "default"
+
+
+def test_code_file_in_subfolder_renders(tmp_path):
+    """Test that code files in subfolders are rendered with syntax highlighting."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "snippets").mkdir()
+
+    # Code file in subfolder should be rendered
+    (site / "snippets" / "example.py").write_text(
+        '# Example script\nprint("Hello, World!")', encoding="utf-8"
+    )
+
+    pages = ContentProcessor(site).load()
+    urls = {p.url for p in pages}
+
+    assert "/snippets/example/" in urls
+    code_page = next(p for p in pages if p.url == "/snippets/example/")
+    assert code_page.source_type == "code"
+    assert code_page.title == "Example"
+    assert "Hello, World!" in code_page.content
+    # Should have Pygments highlight class or code tag
+    assert "highlight" in code_page.content or "<code" in code_page.content
+
+
+def test_code_file_in_root_ignored(tmp_path):
+    """Test that code files in root site/ directory are ignored."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+
+    # Code file in root should NOT be rendered
+    (site / "script.py").write_text('print("Ignored")', encoding="utf-8")
+    # But markdown in root should work
+    (site / "index.md").write_text("# Home", encoding="utf-8")
+
+    pages = ContentProcessor(site).load()
+    urls = {p.url for p in pages}
+
+    assert "/" in urls  # markdown works
+    assert "/script/" not in urls  # code file ignored
+
+
+def test_code_file_date_extraction(tmp_path):
+    """Test date extraction from code file names."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "tutorials").mkdir()
+
+    (site / "tutorials" / "2024-06-15-my-script.py").write_text("x = 1", encoding="utf-8")
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "my-script" in p.url)
+
+    assert page.date == datetime(2024, 6, 15)
+    assert page.slug == "my-script"
+    assert page.title == "My Script"
+    assert page.group == "tutorials"
+
+
+def test_code_file_description_extraction(tmp_path):
+    """Test description extraction from code comments."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "code").mkdir()
+
+    # Python comment
+    (site / "code" / "py-comment.py").write_text("# A helpful script\nx = 1", encoding="utf-8")
+    # Python docstring
+    (site / "code" / "py-docstring.py").write_text('"""A useful module."""\nx = 1', encoding="utf-8")
+    # JS comment
+    (site / "code" / "js-comment.js").write_text("// JavaScript helper\nconst x = 1;", encoding="utf-8")
+
+    pages = ContentProcessor(site).load()
+
+    py_comment = next(p for p in pages if "py-comment" in p.url)
+    assert py_comment.description == "A helpful script"
+
+    py_docstring = next(p for p in pages if "py-docstring" in p.url)
+    assert py_docstring.description == "A useful module."
+
+    js_comment = next(p for p in pages if "js-comment" in p.url)
+    assert js_comment.description == "JavaScript helper"

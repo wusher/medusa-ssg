@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ current_page.title }} | {{ data.title }}</title>
   <meta name="description" content="{{ current_page.description or data.description or '' }}">
-  <link rel="stylesheet" href="{{ url_for('/assets/css/main.css') }}">
+  <link rel="stylesheet" href="{{ css_path('main') }}">
 </head>
 <body class="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100">
   {% include "header.html.jinja" %}
@@ -17,6 +17,6 @@
     </div>
   </main>
   {% include "footer.html.jinja" %}
-  <script src="{{ url_for('/assets/js/main.js') }}"></script>
+  <script src="{{ js_path('main') }}"></script>
 </body>
 </html>

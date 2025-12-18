@@ -2,8 +2,9 @@
 
 - Add linting (ruff/black pre-commit hook)
 - Build out code pages section
-- Configure GitHub Pages deployment
-- add the ability to root a site so relative paths will work
+x Configure GitHub Pages deployment
+x add the ability to root a site so relative paths will work
+
 
 ## GitHub Pages setup
 

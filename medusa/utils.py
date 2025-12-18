@@ -24,6 +24,36 @@ HASHTAG_RE = re.compile(r"#([a-zA-Z][a-zA-Z0-9]{2,}(?:/[a-zA-Z0-9]+)*)")
 _URL_ATTR_RE = re.compile(r'(?P<prefix>\b(?:href|src|action)=["\'])(?P<url>[^"\']+)(?P<suffix>["\'])')
 _URL_SKIP_PREFIXES = ("http://", "https://", "//", "mailto:", "tel:", "#", "javascript:")
 
+# Map file extensions to language names for syntax highlighting
+CODE_EXTENSIONS: dict[str, str] = {
+    ".py": "python",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".tsx": "tsx",
+    ".jsx": "jsx",
+    ".rs": "rust",
+    ".go": "go",
+    ".java": "java",
+    ".rb": "ruby",
+    ".sh": "bash",
+    ".bash": "bash",
+    ".zsh": "zsh",
+    ".css": "css",
+    ".scss": "scss",
+    ".sass": "sass",
+    ".json": "json",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".toml": "toml",
+    ".xml": "xml",
+    ".sql": "sql",
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".hpp": "cpp",
+    ".cc": "cpp",
+}
+
 
 def slugify(name: str) -> str:
     """Convert filename (without extension) to slug, dropping date and layout suffixes.
@@ -117,6 +147,30 @@ def is_markdown(path: Path) -> bool:
 
 def is_template(path: Path) -> bool:
     return path.suffixes[-2:] == [".html", ".jinja"] or path.suffix == ".jinja"
+
+
+def is_code_file(path: Path) -> bool:
+    """Check if a path is a supported code file.
+
+    Args:
+        path: Path to check.
+
+    Returns:
+        True if the file extension is in CODE_EXTENSIONS.
+    """
+    return path.suffix.lower() in CODE_EXTENSIONS
+
+
+def get_code_language(path: Path) -> str:
+    """Get the language identifier for a code file.
+
+    Args:
+        path: Path to the code file.
+
+    Returns:
+        Language identifier string for syntax highlighting.
+    """
+    return CODE_EXTENSIONS.get(path.suffix.lower(), "text")
 
 
 def limit_lines(text: str, width: int = 80) -> str:

@@ -4,7 +4,10 @@
 - `pages`: PageCollection with helpers `group("posts")`, `with_tag("python")`, `drafts()`, `published()`, `sorted(reverse=True)`, `latest(count=5)`
 - `tags`: TagCollection mapping tag name to PageCollection, e.g. `tags["python"].latest(3)`
 - `data`: merged YAML from `data/`
-- `url_for(path)`: builds URLs; keeps assets relative
+- `url_for(path)`: builds URLs; respects `root_url`
+- `js_path(name)`: returns `/assets/js/{name}.js`
+- `css_path(name)`: returns `/assets/css/{name}.css`
+- `img_path(name)`: returns `/assets/images/{name}.{ext}` (auto-detects png/jpg/jpeg/gif)
 
 ### Collections API
 - PageCollection (e.g., `pages`, `pages.group("posts")`):

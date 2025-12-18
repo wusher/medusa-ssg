@@ -60,6 +60,64 @@ class TemplateEngine:
         self.env.globals["pages"] = self.pages
         self.env.globals["tags"] = self.tags
         self.env.globals["url_for"] = self._url_for
+        self.env.globals["pygments_css"] = self._pygments_css
+        self.env.globals["js_path"] = self._js_path
+        self.env.globals["css_path"] = self._css_path
+        self.env.globals["img_path"] = self._img_path
+
+    @staticmethod
+    def _pygments_css() -> str:
+        """Return Pygments CSS styles for syntax highlighting.
+
+        Returns:
+            CSS string for the .highlight class.
+        """
+        try:
+            from pygments.formatters import HtmlFormatter
+
+            return HtmlFormatter().get_style_defs(".highlight")
+        except ImportError:
+            return ""
+
+    def _js_path(self, name: str) -> str:
+        """Return URL path for a JavaScript file.
+
+        Args:
+            name: Filename without extension (e.g., "app" for app.js).
+
+        Returns:
+            URL path like /assets/js/app.js
+        """
+        return self._url_for(f"/assets/js/{name}.js")
+
+    def _css_path(self, name: str) -> str:
+        """Return URL path for a CSS file.
+
+        Args:
+            name: Filename without extension (e.g., "main" for main.css).
+
+        Returns:
+            URL path like /assets/css/main.css
+        """
+        return self._url_for(f"/assets/css/{name}.css")
+
+    def _img_path(self, name: str) -> str:
+        """Return URL path for an image file, auto-detecting extension.
+
+        Searches for the image with extensions in order: png, jpg, jpeg, gif.
+
+        Args:
+            name: Filename without extension (e.g., "logo" for logo.png).
+
+        Returns:
+            URL path like /assets/images/logo.png
+        """
+        assets_dir = self.site_dir.parent / "assets" / "images"
+        for ext in ("png", "jpg", "jpeg", "gif"):
+            if (assets_dir / f"{name}.{ext}").exists():
+                return self._url_for(f"/assets/images/{name}.{ext}")
+        # Fallback to .png if no file found
+        return self._url_for(f"/assets/images/{name}.png")
 
     def update_collections(
         self, pages: Iterable[Page], tags: dict[str, list[Page]]

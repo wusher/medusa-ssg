@@ -23,6 +23,8 @@ from .utils import (
     extract_date_from_name,
     extract_tags,
     first_paragraph,
+    get_code_language,
+    is_code_file,
     is_internal_path,
     is_markdown,
     is_template,
@@ -91,8 +93,8 @@ def _rewrite_image_path(src: str, folder: str) -> str:
     return f"/assets/images/{normalized}"
 
 
-class _ImageRenderer(mistune.HTMLRenderer):
-    """Custom Markdown renderer that rewrites image paths.
+class _HighlightRenderer(mistune.HTMLRenderer):
+    """Custom Markdown renderer with image path rewriting and syntax highlighting.
 
     Attributes:
         folder: Folder containing the page being rendered.
@@ -120,6 +122,32 @@ class _ImageRenderer(mistune.HTMLRenderer):
         """
         src = _rewrite_image_path(url or "", self.folder)
         return super().image(text, src, title)
+
+    def block_code(self, code: str, info: str | None = None) -> str:
+        """Render a code block with Pygments syntax highlighting.
+
+        Args:
+            code: The code content.
+            info: Language identifier (e.g., 'python', 'javascript').
+
+        Returns:
+            HTML string with highlighted code.
+        """
+        if info:
+            try:
+                from pygments import highlight
+                from pygments.lexers import get_lexer_by_name
+                from pygments.formatters import HtmlFormatter
+
+                lexer = get_lexer_by_name(info, stripall=True)
+                formatter = HtmlFormatter(nowrap=False, cssclass="highlight")
+                return highlight(code, lexer, formatter)
+            except Exception:
+                pass
+        # Fallback: plain code block
+        escaped = code.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        lang_class = f' class="language-{info}"' if info else ""
+        return f"<pre><code{lang_class}>{escaped}</code></pre>\n"
 
 
 class ContentProcessor:
@@ -157,7 +185,7 @@ class ContentProcessor:
         """Iterate over all source files in the site directory.
 
         Yields:
-            Paths to content files.
+            Paths to content files (markdown, templates, and code files in subfolders).
         """
         for path in self.site_dir.rglob("*"):
             if path.is_dir():
@@ -169,6 +197,9 @@ class ContentProcessor:
             if rel.name.startswith("_") and not include_drafts:
                 continue
             if is_markdown(path) or is_template(path):
+                yield path
+            # Code files only in subfolders (not root site/)
+            elif is_code_file(path) and len(parts) > 1:
                 yield path
 
     def _build_page(self, path: Path, draft: bool) -> Page:
@@ -185,24 +216,36 @@ class ContentProcessor:
         folder = str(rel.parent.as_posix()) if rel.parent != Path(".") else ""
         filename = path.name
         body = path.read_text(encoding="utf-8")
-        tags = extract_tags(body)
         date = extract_date_from_name(path.stem) or datetime.fromtimestamp(
             path.stat().st_mtime
         )
         layout = self._resolve_layout(path, folder)
         slug = slugify(path.stem)
         url = self._derive_url(rel, slug)
-        title = self._resolve_title(body, filename)
 
-        render_source = strip_hashtags(body)
-        if is_markdown(path):
+        if is_code_file(path):
+            # Code files: wrap in code block and render
+            lang = get_code_language(path)
+            markdown_source = f"```{lang}\n{body}\n```"
+            content = self._render_markdown(markdown_source, folder)
+            title = titleize(filename)
+            tags: List[str] = []
+            description = self._extract_code_description(body)
+            source_type = "code"
+        elif is_markdown(path):
+            tags = extract_tags(body)
+            render_source = strip_hashtags(body)
             content = self._render_markdown(render_source, folder)
+            title = self._resolve_title(body, filename)
+            description = first_paragraph(strip_hashtags(body))
             source_type = "markdown"
         else:
+            tags = extract_tags(body)
+            render_source = strip_hashtags(body)
             content = render_source
+            title = self._resolve_title(body, filename)
+            description = first_paragraph(strip_hashtags(body))
             source_type = "jinja"
-
-        description = first_paragraph(strip_hashtags(body))
 
         return Page(
             title=title,
@@ -224,7 +267,7 @@ class ContentProcessor:
 
     def _render_markdown(self, text: str, folder: str) -> str:
         cleaned = strip_hashtags(text)
-        renderer = _ImageRenderer(folder)
+        renderer = _HighlightRenderer(folder)
         markdown = mistune.create_markdown(
             renderer=renderer, plugins=["strikethrough", "footnotes", "table", "url"]
         )
@@ -244,6 +287,42 @@ class ContentProcessor:
             if stripped.startswith("# "):
                 return stripped.lstrip("# ").strip()
         return titleize(filename)
+
+    def _extract_code_description(self, code: str) -> str:
+        """Extract description from code file (first comment or empty).
+
+        Args:
+            code: Source code content.
+
+        Returns:
+            Description string, limited to 160 characters.
+        """
+        lines = code.strip().splitlines()
+        if not lines:
+            return ""
+
+        first_line = lines[0].strip()
+
+        # Python/Ruby/Shell: # comment (but not shebang)
+        if first_line.startswith("#") and not first_line.startswith("#!"):
+            return first_line.lstrip("#").strip()[:160]
+        # C-style: // comment
+        if first_line.startswith("//"):
+            return first_line.lstrip("/").strip()[:160]
+        # Docstring: """ or '''
+        if first_line.startswith(('"""', "'''")):
+            delimiter = first_line[:3]
+            # Single line docstring
+            if first_line.endswith(delimiter) and len(first_line) > 6:
+                return first_line[3:-3].strip()[:160]
+            # Multi-line: get first content line
+            for line in lines[1:]:
+                stripped = line.strip()
+                if stripped and not stripped.startswith(delimiter):
+                    return stripped[:160]
+                if delimiter in stripped:
+                    break
+        return ""
 
     def _resolve_layout(self, path: Path, folder: str) -> str:
         name = path.stem

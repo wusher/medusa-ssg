@@ -66,6 +66,21 @@ def test_path_helpers_and_tags_index(tmp_path):
     assert utils.is_template(Path("index.html.jinja"))
     assert utils.is_markdown(Path("page.md"))
 
+    # Code file detection
+    assert utils.is_code_file(Path("script.py"))
+    assert utils.is_code_file(Path("app.js"))
+    assert utils.is_code_file(Path("main.rs"))
+    assert utils.is_code_file(Path("config.yaml"))
+    assert not utils.is_code_file(Path("readme.md"))
+    assert not utils.is_code_file(Path("page.html.jinja"))
+    assert not utils.is_code_file(Path("data.txt"))
+
+    # Language detection
+    assert utils.get_code_language(Path("app.py")) == "python"
+    assert utils.get_code_language(Path("index.js")) == "javascript"
+    assert utils.get_code_language(Path("main.go")) == "go"
+    assert utils.get_code_language(Path("unknown.xyz")) == "text"
+
     class Page:
         def __init__(self, tags):
             self.tags = tags
