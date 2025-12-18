@@ -19,12 +19,15 @@ import os
 import shutil
 import subprocess
 
+from . import __version__
+
 
 # Path to the default template directory
 _TEMPLATES_DIR = Path(__file__).parent / "templates" / "default"
 
 
 @click.group()
+@click.version_option(version=__version__, prog_name="medusa")
 def cli():
     """Medusa static site generator."""
 
