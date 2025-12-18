@@ -295,8 +295,10 @@ class DevServer:
 
     def _activate_staging(self, staging: Path) -> None:
         target = self.output_dir
-        # Atomic replace to avoid windows where output is missing.
-        os.replace(staging, target)
+        # Remove existing output and replace with staging
+        if target.exists():
+            shutil.rmtree(target)
+        staging.rename(target)
 
 
 class _ChangeHandler(FileSystemEventHandler):
