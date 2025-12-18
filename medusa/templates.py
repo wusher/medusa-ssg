@@ -64,6 +64,7 @@ class TemplateEngine:
         self.env.globals["js_path"] = self._js_path
         self.env.globals["css_path"] = self._css_path
         self.env.globals["img_path"] = self._img_path
+        self.env.globals["font_path"] = self._font_path
 
     @staticmethod
     def _pygments_css() -> str:
@@ -118,6 +119,24 @@ class TemplateEngine:
                 return self._url_for(f"/assets/images/{name}.{ext}")
         # Fallback to .png if no file found
         return self._url_for(f"/assets/images/{name}.png")
+
+    def _font_path(self, name: str) -> str:
+        """Return URL path for a font file, auto-detecting extension.
+
+        Searches for the font with extensions in order: woff2, woff, ttf, otf.
+
+        Args:
+            name: Filename without extension (e.g., "inter" for inter.woff2).
+
+        Returns:
+            URL path like /assets/fonts/inter.woff2
+        """
+        assets_dir = self.site_dir.parent / "assets" / "fonts"
+        for ext in ("woff2", "woff", "ttf", "otf"):
+            if (assets_dir / f"{name}.{ext}").exists():
+                return self._url_for(f"/assets/fonts/{name}.{ext}")
+        # Fallback to .woff2 if no file found
+        return self._url_for(f"/assets/fonts/{name}.woff2")
 
     def update_collections(
         self, pages: Iterable[Page], tags: dict[str, list[Page]]

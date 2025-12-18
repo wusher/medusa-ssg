@@ -38,6 +38,18 @@ Use `img_path()` to reference images in `assets/images/`. The helper automatical
 <!-- finds photos/hero.png, etc. -->
 ```
 
+## Fonts
+
+Use `font_path()` to reference fonts in `assets/fonts/`. The helper automatically detects the file extension by searching for `.woff2`, `.woff`, `.ttf`, then `.otf`:
+
+```jinja
+@font-face {
+  font-family: 'Inter';
+  src: url('{{ font_path('inter') }}') format('woff2');
+}
+<!-- finds inter.woff2, inter.woff, inter.ttf, or inter.otf -->
+```
+
 ## With root_url
 
 All helpers respect the `root_url` setting in `medusa.yaml`. If you set:

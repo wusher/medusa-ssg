@@ -8,6 +8,7 @@
 - `js_path(name)`: returns `/assets/js/{name}.js`
 - `css_path(name)`: returns `/assets/css/{name}.css`
 - `img_path(name)`: returns `/assets/images/{name}.{ext}` (auto-detects png/jpg/jpeg/gif)
+- `font_path(name)`: returns `/assets/fonts/{name}.{ext}` (auto-detects woff2/woff/ttf/otf)
 
 ### Collections API
 - PageCollection (e.g., `pages`, `pages.group("posts")`):

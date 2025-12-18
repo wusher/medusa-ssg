@@ -111,7 +111,7 @@ def test_missing_partial_falls_back(tmp_path, capsys):
 
 
 def test_asset_path_helpers(tmp_path):
-    """Test js_path, css_path, and img_path helpers."""
+    """Test js_path, css_path, img_path, and font_path helpers."""
     site = tmp_path / "site"
     site.mkdir()
 
@@ -120,11 +120,16 @@ def test_asset_path_helpers(tmp_path):
     (assets / "js").mkdir(parents=True)
     (assets / "css").mkdir()
     (assets / "images").mkdir()
+    (assets / "fonts").mkdir()
 
     # Create some image files
     (assets / "images" / "logo.png").write_text("png")
     (assets / "images" / "photo.jpg").write_text("jpg")
     (assets / "images" / "icon.gif").write_text("gif")
+
+    # Create some font files
+    (assets / "fonts" / "inter.woff2").write_text("woff2")
+    (assets / "fonts" / "roboto.ttf").write_text("ttf")
 
     engine = TemplateEngine(site, {})
 
@@ -144,16 +149,26 @@ def test_asset_path_helpers(tmp_path):
     # img_path - falls back to .png for missing files
     assert engine._img_path("missing") == "/assets/images/missing.png"
 
+    # font_path - finds existing files with correct extension
+    assert engine._font_path("inter") == "/assets/fonts/inter.woff2"
+    assert engine._font_path("roboto") == "/assets/fonts/roboto.ttf"
+
+    # font_path - falls back to .woff2 for missing files
+    assert engine._font_path("missing") == "/assets/fonts/missing.woff2"
+
 
 def test_asset_path_helpers_with_root_url(tmp_path):
     """Test asset helpers respect root_url."""
     site = tmp_path / "site"
     site.mkdir()
     (tmp_path / "assets" / "images").mkdir(parents=True)
+    (tmp_path / "assets" / "fonts").mkdir(parents=True)
     (tmp_path / "assets" / "images" / "hero.jpeg").write_text("jpeg")
+    (tmp_path / "assets" / "fonts" / "custom.woff").write_text("woff")
 
     engine = TemplateEngine(site, {}, root_url="https://cdn.example.com")
 
     assert engine._js_path("app") == "https://cdn.example.com/assets/js/app.js"
     assert engine._css_path("main") == "https://cdn.example.com/assets/css/main.css"
     assert engine._img_path("hero") == "https://cdn.example.com/assets/images/hero.jpeg"
+    assert engine._font_path("custom") == "https://cdn.example.com/assets/fonts/custom.woff"
