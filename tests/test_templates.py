@@ -172,3 +172,32 @@ def test_asset_path_helpers_with_root_url(tmp_path):
     assert engine._css_path("main") == "https://cdn.example.com/assets/css/main.css"
     assert engine._img_path("hero") == "https://cdn.example.com/assets/images/hero.jpeg"
     assert engine._font_path("custom") == "https://cdn.example.com/assets/fonts/custom.woff"
+
+
+def test_asset_path_helpers_with_extension_already_present(tmp_path):
+    """Test asset helpers don't double-append extensions."""
+    site = tmp_path / "site"
+    site.mkdir()
+    (tmp_path / "assets" / "images").mkdir(parents=True)
+    (tmp_path / "assets" / "fonts").mkdir(parents=True)
+
+    engine = TemplateEngine(site, {})
+
+    # js_path with .js extension
+    assert engine._js_path("app.js") == "/assets/js/app.js"
+    assert engine._js_path("vendor/lib.js") == "/assets/js/vendor/lib.js"
+
+    # css_path with .css extension
+    assert engine._css_path("main.css") == "/assets/css/main.css"
+    assert engine._css_path("themes/dark.css") == "/assets/css/themes/dark.css"
+
+    # img_path with various image extensions
+    assert engine._img_path("logo.png") == "/assets/images/logo.png"
+    assert engine._img_path("photo.jpg") == "/assets/images/photo.jpg"
+    assert engine._img_path("icon.svg") == "/assets/images/icon.svg"
+    assert engine._img_path("banner.webp") == "/assets/images/banner.webp"
+
+    # font_path with various font extensions
+    assert engine._font_path("inter.woff2") == "/assets/fonts/inter.woff2"
+    assert engine._font_path("roboto.ttf") == "/assets/fonts/roboto.ttf"
+    assert engine._font_path("custom.eot") == "/assets/fonts/custom.eot"

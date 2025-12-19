@@ -1,0 +1,301 @@
+# Medusa Static Site Generator
+
+Medusa is a Python static site generator with Jinja2 templates, Markdown support, and optional Tailwind CSS integration.
+
+## Project Structure
+
+```
+my-site/
+├── medusa.yaml          # Site configuration
+├── site/                # Content files
+│   ├── _layouts/        # Layout templates
+│   ├── _partials/       # Reusable template fragments
+│   ├── posts/           # Blog posts (or any content group)
+│   └── index.md         # Homepage
+├── assets/              # Static assets
+│   ├── css/             # Stylesheets
+│   ├── js/              # JavaScript files
+│   ├── images/          # Images
+│   └── fonts/           # Font files
+├── data/                # YAML data files (merged into `data` variable)
+└── output/              # Generated site (created by build)
+```
+
+## CLI Commands
+
+```bash
+medusa new <name>        # Scaffold a new project
+medusa build             # Build the site
+medusa build --drafts    # Build including draft pages
+medusa serve             # Start dev server with live reload
+medusa serve --drafts    # Serve including drafts
+medusa md                # Interactive markdown file creator
+medusa --version         # Show version
+medusa --help            # Show help
+```
+
+## Configuration (medusa.yaml)
+
+```yaml
+title: My Site
+description: Site description
+url: https://example.com
+root_url: https://cdn.example.com  # Optional: prefix for all URLs
+output_dir: output                  # Default: output
+port: 4000                          # Dev server port
+```
+
+## Content Files
+
+### Markdown Files (.md)
+
+```markdown
+---
+author: John Doe
+category: tutorials
+featured: true
+---
+
+# My Post Title
+
+Body content here with #python and #web tags.
+```
+
+### YAML Frontmatter
+
+Optional YAML between `---` markers. The frontmatter is parsed and available as a dictionary in templates via `{{ frontmatter }}`:
+
+```jinja
+{% if frontmatter.featured %}
+  <span class="badge">Featured</span>
+{% endif %}
+<p>By {{ frontmatter.author }}</p>
+```
+
+Frontmatter does not affect page properties - it's just data for your templates.
+
+### Hashtag-style Tags
+
+Tags are extracted from `#hashtags` in the content:
+
+```markdown
+This is about #python and #web development.
+```
+
+Becomes `current_page.tags = ["python", "web"]`. Hashtags are removed from rendered output.
+
+### Jinja Templates (.html.jinja)
+
+```jinja
+---
+show_sidebar: true
+---
+
+<h1>{{ current_page.title }}</h1>
+{% if frontmatter.show_sidebar %}
+  {% include "sidebar.html.jinja" %}
+{% endif %}
+```
+
+### Code Files (.py, .js, .ts, .rs, etc.)
+
+Code files in subfolders are rendered as pages with syntax highlighting:
+- `site/snippets/example.py` → `/snippets/example/`
+- Title from filename (humanized)
+- Description from first comment
+- Date from filename prefix: `2024-01-15-script.py`
+
+Code files in root `site/` are ignored.
+
+## Draft Pages
+
+Two ways to mark drafts:
+1. Prefix filename with underscore: `_my-draft.md`
+2. Set `draft: true` in frontmatter
+
+Build/serve with `--drafts` to include them.
+
+## Layout Resolution
+
+Layout is determined by (in order):
+1. Frontmatter `layout` field
+2. Filename bracket syntax: `about[hero].md` → uses `hero` layout
+3. Matching layout file: `site/about.md` → `_layouts/about.html.jinja`
+4. Folder-based: `site/posts/hello.md` → `_layouts/posts.html.jinja`
+5. Fallback: `_layouts/default.html.jinja`
+
+## Template Variables
+
+### In layouts and pages:
+
+```jinja
+{{ current_page.title }}       # Page title
+{{ current_page.content }}     # Rendered HTML content
+{{ current_page.description }} # Description
+{{ current_page.url }}         # URL path
+{{ current_page.date }}        # Publication date
+{{ current_page.tags }}        # List of tags
+{{ current_page.draft }}       # Boolean
+{{ current_page.layout }}      # Layout name
+{{ current_page.group }}       # Content group (e.g., "posts")
+
+{{ frontmatter }}              # Dict of YAML frontmatter (raw data)
+{{ frontmatter.author }}       # Access frontmatter fields
+
+{{ data }}                     # Merged YAML from data/ folder
+{{ data.title }}               # From medusa.yaml or data files
+
+{{ pages }}                    # PageCollection of all pages
+{{ tags }}                     # TagCollection mapping tag → pages
+```
+
+### In layouts only:
+
+```jinja
+{{ page_content | safe }}      # Rendered page body
+```
+
+## Collections API
+
+### PageCollection
+
+```jinja
+{% for page in pages %}
+{% for page in pages.group("posts") %}
+{% for page in pages.with_tag("python") %}
+{% for page in pages.published() %}
+{% for page in pages.drafts() %}
+{% for page in pages.sorted(reverse=True) %}
+{% for page in pages.latest(5) %}
+```
+
+### TagCollection
+
+```jinja
+{% for tag, tag_pages in tags.items() %}
+  <h2>{{ tag }}</h2>
+  {% for page in tag_pages.latest(3) %}
+{% endfor %}
+
+{{ tags["python"].latest(5) }}
+```
+
+## Asset Path Helpers
+
+All helpers respect `root_url` configuration:
+
+```jinja
+{{ css_path('main') }}         # /assets/css/main.css
+{{ css_path('main.css') }}     # /assets/css/main.css (extension optional)
+
+{{ js_path('app') }}           # /assets/js/app.js
+{{ js_path('app.js') }}        # /assets/js/app.js
+
+{{ img_path('logo') }}         # Auto-detects: .png, .jpg, .jpeg, .gif
+{{ img_path('logo.svg') }}     # /assets/images/logo.svg
+
+{{ font_path('inter') }}       # Auto-detects: .woff2, .woff, .ttf, .otf
+{{ font_path('inter.woff2') }} # /assets/fonts/inter.woff2
+
+{{ url_for('/about/') }}       # Builds URL with root_url prefix
+```
+
+## Syntax Highlighting
+
+Code blocks with language identifiers get Pygments highlighting:
+
+````markdown
+```python
+def hello():
+    print("Hello!")
+```
+````
+
+Include `pygments.css` in your layout:
+
+```jinja
+<link rel="stylesheet" href="{{ css_path('pygments') }}">
+```
+
+Or use the dynamic helper:
+
+```jinja
+<style>{{ pygments_css() }}</style>
+```
+
+## Partials
+
+Include reusable template fragments:
+
+```jinja
+{% include "header.html.jinja" %}
+{% include "footer.html.jinja" %}
+```
+
+Partials live in `site/_partials/`.
+
+## Data Files
+
+YAML files in `data/` are merged and available as `data`:
+
+```
+data/
+├── site.yaml      # data.site.*
+└── authors.yaml   # data.authors.*
+```
+
+## Date Prefix Convention
+
+Files can have date prefixes that are stripped from the URL:
+
+```
+site/posts/2024-01-15-my-post.md → /posts/my-post/
+```
+
+The date is extracted and used as `current_page.date`.
+
+## Dev Server
+
+```bash
+medusa serve
+```
+
+- Serves at http://localhost:4000
+- WebSocket-based live reload on file changes
+- Watches: `site/`, `assets/`, `data/`, and root config files
+- Injects reload script into HTML pages
+- Custom 404 page: `site/404.md` or `site/404.html.jinja`
+
+## Tailwind CSS Integration
+
+If `tailwind.config.js` exists, Tailwind is processed automatically:
+
+```bash
+npm install -D tailwindcss
+npx tailwindcss init
+```
+
+Input: `assets/css/main.css` (with `@tailwind` directives)
+Output: Processed CSS in `output/assets/css/main.css`
+
+## Page Schema
+
+```
+Page:
+  title: str
+  body: str          # Raw source content
+  content: str       # Rendered HTML
+  description: str
+  url: str           # e.g., "/posts/my-post/"
+  slug: str          # e.g., "my-post"
+  date: datetime
+  tags: list[str]
+  draft: bool
+  layout: str
+  group: str         # First URL segment (e.g., "posts")
+  path: Path         # Source file path
+  folder: str        # Relative folder
+  filename: str      # Source filename
+  source_type: str   # "markdown", "jinja", or "code"
+  frontmatter: dict  # All frontmatter fields
+```

@@ -6,6 +6,7 @@
   <title>{{ current_page.title }} | {{ data.title }}</title>
   <meta name="description" content="{{ current_page.description or data.description or '' }}">
   <link rel="stylesheet" href="{{ css_path('main') }}">
+  <link rel="stylesheet" href="{{ css_path('pygments') }}">
 </head>
 <body class="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100">
   {% include "header.html.jinja" %}

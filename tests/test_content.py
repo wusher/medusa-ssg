@@ -203,3 +203,71 @@ def test_code_file_description_extraction(tmp_path):
 
     js_comment = next(p for p in pages if "js-comment" in p.url)
     assert js_comment.description == "JavaScript helper"
+
+
+def test_frontmatter_extraction(tmp_path):
+    """Test YAML frontmatter is parsed and available as dict."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "posts").mkdir()
+
+    (site / "posts" / "with-frontmatter.md").write_text(
+        """---
+author: John Doe
+category: tutorials
+featured: true
+custom_list:
+  - one
+  - two
+---
+
+# Markdown Title
+
+Body content here.
+""",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "with-frontmatter" in p.url)
+
+    # Frontmatter is just data - doesn't affect page properties
+    assert page.title == "Markdown Title"  # From heading, not frontmatter
+    assert page.layout == "default"  # Auto-detected, not from frontmatter
+
+    # Frontmatter dict has all fields
+    assert page.frontmatter["author"] == "John Doe"
+    assert page.frontmatter["category"] == "tutorials"
+    assert page.frontmatter["featured"] is True
+    assert page.frontmatter["custom_list"] == ["one", "two"]
+
+
+def test_frontmatter_empty_or_missing(tmp_path):
+    """Test handling of empty or missing frontmatter."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+
+    # Empty frontmatter
+    (site / "empty-fm.md").write_text(
+        """---
+---
+
+# Title From Heading
+""",
+        encoding="utf-8",
+    )
+
+    # No frontmatter
+    (site / "no-fm.md").write_text("# Regular Markdown\n\nContent", encoding="utf-8")
+
+    pages = ContentProcessor(site).load()
+
+    empty = next(p for p in pages if "empty-fm" in p.url)
+    assert empty.title == "Title From Heading"
+    assert empty.frontmatter == {}
+
+    no_fm = next(p for p in pages if "no-fm" in p.url)
+    assert no_fm.title == "Regular Markdown"
+    assert no_fm.frontmatter == {}

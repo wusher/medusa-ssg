@@ -10,14 +10,15 @@ Key classes:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, List
+from typing import Any, Iterable, List
 import os
 import re
 
 import mistune
+import yaml
 
 from .utils import (
     extract_date_from_name,
@@ -35,6 +36,28 @@ from .utils import (
 
 
 IMAGE_SRC_RE = re.compile(r'<img\s+[^>]*src="([^"]+)"', re.IGNORECASE)
+FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+
+def _extract_frontmatter(text: str) -> tuple[dict[str, Any], str]:
+    """Extract YAML frontmatter from content.
+
+    Args:
+        text: Raw file content.
+
+    Returns:
+        Tuple of (frontmatter dict, remaining content).
+    """
+    match = FRONTMATTER_RE.match(text)
+    if not match:
+        return {}, text
+    try:
+        data = yaml.safe_load(match.group(1)) or {}
+        if not isinstance(data, dict):
+            return {}, text
+        return data, text[match.end() :]
+    except yaml.YAMLError:
+        return {}, text
 
 
 @dataclass
@@ -73,7 +96,8 @@ class Page:
     path: Path
     folder: str
     filename: str
-    source_type: str  # "markdown" | "jinja"
+    source_type: str  # "markdown" | "jinja" | "code"
+    frontmatter: dict[str, Any] = field(default_factory=dict)
 
 
 def _rewrite_image_path(src: str, folder: str) -> str:
@@ -215,11 +239,20 @@ class ContentProcessor:
         rel = path.relative_to(self.site_dir)
         folder = str(rel.parent.as_posix()) if rel.parent != Path(".") else ""
         filename = path.name
-        body = path.read_text(encoding="utf-8")
+        raw_body = path.read_text(encoding="utf-8")
+
+        # Extract frontmatter for markdown and jinja files
+        if is_code_file(path):
+            frontmatter: dict[str, Any] = {}
+            body = raw_body
+        else:
+            frontmatter, body = _extract_frontmatter(raw_body)
+
         date = extract_date_from_name(path.stem) or datetime.fromtimestamp(
             path.stat().st_mtime
         )
         layout = self._resolve_layout(path, folder)
+
         slug = slugify(path.stem)
         url = self._derive_url(rel, slug)
 
@@ -263,6 +296,7 @@ class ContentProcessor:
             folder=folder,
             filename=filename,
             source_type=source_type,
+            frontmatter=frontmatter,
         )
 
     def _render_markdown(self, text: str, folder: str) -> str:

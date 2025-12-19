@@ -63,6 +63,49 @@ def test_dev_server_port_override(tmp_path):
 
     explicit = DevServer(tmp_path, http_port=5055, ws_port=6000)
     assert explicit.ws_port == 6000
+    assert f":{explicit.ws_port}" in explicit._reload_script
+
+
+def test_rebuild_waits_before_reload(monkeypatch, tmp_path):
+    server = DevServer(tmp_path)
+    server._post_build_delay = 0.01
+    calls = []
+
+    def fake_build(*args, **kwargs):
+        calls.append(("build", kwargs.get("output_dir_override")))
+
+    monkeypatch.setattr("medusa.server.build_site", fake_build)
+    monkeypatch.setattr("medusa.server.DevServer._broadcast_reload", lambda self=server: calls.append("reload"))
+    slept = []
+    monkeypatch.setattr("medusa.server.time.sleep", lambda secs: slept.append(secs))
+
+    server.rebuild(include_drafts=False)
+    assert len(calls) == 2
+    assert calls[0][0] == "build"
+    assert calls[0][1] == server._staging_dir
+    assert calls[1] == "reload"
+    assert slept == [0.01]
+
+
+def test_rebuild_avoids_cleaning_output(monkeypatch, tmp_path):
+    server = DevServer(tmp_path)
+    server._post_build_delay = 0
+    server._broadcast_reload = lambda: None
+    server._compute_signature = lambda: ("sig",)
+    called = {}
+
+    def fake_build(root, include_drafts=False, root_url=None, clean_output=True, output_dir_override=None):
+        called["clean_output"] = clean_output
+        called["output_dir_override"] = output_dir_override
+        # simulate writing into staging
+        (output_dir_override / "index.html").write_text("new", encoding="utf-8")
+
+    monkeypatch.setattr("medusa.server.build_site", fake_build)
+    server.rebuild(include_drafts=False)
+    assert called["clean_output"] is True
+    assert called["output_dir_override"] == server._staging_dir
+    assert server.output_dir.joinpath("index.html").read_text(encoding="utf-8") == "new"
+    assert not server._staging_dir.exists()
 
 
 def test_rebuild_guard(monkeypatch, tmp_path):

@@ -84,35 +84,45 @@ class TemplateEngine:
         """Return URL path for a JavaScript file.
 
         Args:
-            name: Filename without extension (e.g., "app" for app.js).
+            name: Filename with or without extension (e.g., "app" or "app.js").
 
         Returns:
             URL path like /assets/js/app.js
         """
-        return self._url_for(f"/assets/js/{name}.js")
+        if not name.endswith(".js"):
+            name = f"{name}.js"
+        return self._url_for(f"/assets/js/{name}")
 
     def _css_path(self, name: str) -> str:
         """Return URL path for a CSS file.
 
         Args:
-            name: Filename without extension (e.g., "main" for main.css).
+            name: Filename with or without extension (e.g., "main" or "main.css").
 
         Returns:
             URL path like /assets/css/main.css
         """
-        return self._url_for(f"/assets/css/{name}.css")
+        if not name.endswith(".css"):
+            name = f"{name}.css"
+        return self._url_for(f"/assets/css/{name}")
 
     def _img_path(self, name: str) -> str:
         """Return URL path for an image file, auto-detecting extension.
 
         Searches for the image with extensions in order: png, jpg, jpeg, gif.
+        If name already has an extension, uses it directly.
 
         Args:
-            name: Filename without extension (e.g., "logo" for logo.png).
+            name: Filename with or without extension (e.g., "logo" or "logo.png").
 
         Returns:
             URL path like /assets/images/logo.png
         """
+        # If already has a known image extension, use it directly
+        for ext in ("png", "jpg", "jpeg", "gif", "svg", "webp"):
+            if name.endswith(f".{ext}"):
+                return self._url_for(f"/assets/images/{name}")
+        # Auto-detect extension
         assets_dir = self.site_dir.parent / "assets" / "images"
         for ext in ("png", "jpg", "jpeg", "gif"):
             if (assets_dir / f"{name}.{ext}").exists():
@@ -124,13 +134,19 @@ class TemplateEngine:
         """Return URL path for a font file, auto-detecting extension.
 
         Searches for the font with extensions in order: woff2, woff, ttf, otf.
+        If name already has an extension, uses it directly.
 
         Args:
-            name: Filename without extension (e.g., "inter" for inter.woff2).
+            name: Filename with or without extension (e.g., "inter" or "inter.woff2").
 
         Returns:
             URL path like /assets/fonts/inter.woff2
         """
+        # If already has a known font extension, use it directly
+        for ext in ("woff2", "woff", "ttf", "otf", "eot"):
+            if name.endswith(f".{ext}"):
+                return self._url_for(f"/assets/fonts/{name}")
+        # Auto-detect extension
         assets_dir = self.site_dir.parent / "assets" / "fonts"
         for ext in ("woff2", "woff", "ttf", "otf"):
             if (assets_dir / f"{name}.{ext}").exists():
@@ -159,6 +175,7 @@ class TemplateEngine:
         context = {
             "data": self.data,
             "current_page": page,
+            "frontmatter": page.frontmatter,
             "pages": self.pages,
             "tags": self.tags,
             "url_for": self._url_for,

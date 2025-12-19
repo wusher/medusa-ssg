@@ -92,13 +92,21 @@ def load_data(project_root: Path) -> dict[str, Any]:
     return data
 
 
-def build_site(project_root: Path, include_drafts: bool = False, root_url: str | None = None) -> BuildResult:
+def build_site(
+    project_root: Path,
+    include_drafts: bool = False,
+    root_url: str | None = None,
+    clean_output: bool = True,
+    output_dir_override: Path | None = None,
+) -> BuildResult:
     """Build the entire static site.
 
     Args:
         project_root: Root directory of the project.
         include_drafts: Whether to include draft pages (starting with _).
         root_url: Optional base URL to absolutize links with.
+        clean_output: Whether to wipe the output directory before building.
+        output_dir_override: Optional path to write the build output instead of config output_dir.
 
     Returns:
         BuildResult containing all pages, output directory, and site data.
@@ -106,8 +114,11 @@ def build_site(project_root: Path, include_drafts: bool = False, root_url: str |
     config = load_config(project_root)
     if root_url is not None:
         config["root_url"] = root_url
-    output_dir = project_root / config.get("output_dir", "output")
-    ensure_clean_dir(output_dir)
+    output_dir = output_dir_override or (project_root / config.get("output_dir", "output"))
+    if clean_output:
+        ensure_clean_dir(output_dir)
+    else:
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     data = load_data(project_root)
     resolved_root = str(config.get("root_url") or "")
