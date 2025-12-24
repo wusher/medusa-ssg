@@ -12,7 +12,6 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Iterable
 
 try:
     from rjsmin import jsmin
@@ -136,7 +135,7 @@ class AssetPipeline:
             dest = target / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             if jsmin:
-                with open(js_file, "r", encoding="utf-8") as f_in:
+                with open(js_file, encoding="utf-8") as f_in:
                     minified = jsmin(f_in.read())
                 with open(dest, "w", encoding="utf-8") as f_out:
                     f_out.write(minified)
@@ -144,7 +143,11 @@ class AssetPipeline:
 
             terser = self._find_executable("terser")
             if terser:
-                result = subprocess.run([terser, str(js_file), "-c", "-m", "-o", str(dest)], capture_output=True, text=True)
+                result = subprocess.run(
+                    [terser, str(js_file), "-c", "-m", "-o", str(dest)],
+                    capture_output=True,
+                    text=True,
+                )
                 if result.returncode != 0:
                     print("JS minification failed via terser:", result.stderr.strip())
                     shutil.copy2(js_file, dest)

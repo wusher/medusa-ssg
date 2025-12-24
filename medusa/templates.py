@@ -9,15 +9,15 @@ Key class:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
-
 from markupsafe import Markup
 
-from .content import Heading, Page
 from .collections import PageCollection, TagCollection
+from .content import Heading, Page
 from .utils import join_root_url
 
 
@@ -105,7 +105,9 @@ class TemplateEngine:
         tags: Dictionary of tags to pages.
     """
 
-    def __init__(self, site_dir: Path, data: dict[str, Any], root_url: str | None = None):
+    def __init__(
+        self, site_dir: Path, data: dict[str, Any], root_url: str | None = None
+    ):
         """Initialize the template engine.
 
         Args:
@@ -114,7 +116,9 @@ class TemplateEngine:
         """
         self.site_dir = site_dir
         self.data = data
-        self.root_url = (root_url or (data.get("root_url") if isinstance(data, dict) else "")) or ""
+        self.root_url = (
+            root_url or (data.get("root_url") if isinstance(data, dict) else "")
+        ) or ""
         self.env = Environment(
             loader=FileSystemLoader(
                 [
@@ -242,7 +246,9 @@ class TemplateEngine:
         if path.startswith(("http://", "https://", "//")):
             return path
         # Always keep asset URLs relative to avoid cross-origin issues during dev.
-        base = self.root_url or (self.data.get("url", "") if isinstance(self.data, dict) else "")
+        base = self.root_url or (
+            self.data.get("url", "") if isinstance(self.data, dict) else ""
+        )
         if base:
             return join_root_url(base, path if path.startswith("/") else f"/{path}")
         return path if path.startswith("/") else f"/{path}"
@@ -279,12 +285,14 @@ class TemplateEngine:
         ]
         # If layout isn't "default", also try falling back to default
         if layout != "default":
-            candidates.extend([
-                "default.html.jinja",
-                "default.jinja",
-                "default.html",
-                "default",
-            ])
+            candidates.extend(
+                [
+                    "default.html.jinja",
+                    "default.jinja",
+                    "default.html",
+                    "default",
+                ]
+            )
         for name in candidates:
             try:
                 return self.env.get_template(name)

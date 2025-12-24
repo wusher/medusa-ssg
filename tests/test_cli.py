@@ -1,16 +1,17 @@
-from pathlib import Path
 import subprocess
 
 from click.testing import CliRunner
 
-from medusa.cli import cli
 from medusa.build import BuildResult
+from medusa.cli import cli
 
 
 def test_cli_new_scaffolds_project(tmp_path):
     runner = CliRunner()
     target = tmp_path / "mysite"
-    result = runner.invoke(cli, ["new", str(target)], env={"MEDUSA_SKIP_NPM_INSTALL": "1"})
+    result = runner.invoke(
+        cli, ["new", str(target)], env={"MEDUSA_SKIP_NPM_INSTALL": "1"}
+    )
     assert result.exit_code == 0
     assert (target / "site" / "index.jinja").exists()
     assert (target / "site" / "posts" / "index.jinja").exists()
@@ -21,7 +22,9 @@ def test_cli_new_scaffolds_project(tmp_path):
 
     # fails on non-empty directory
     (target / "extra.txt").write_text("x", encoding="utf-8")
-    result = runner.invoke(cli, ["new", str(target)], env={"MEDUSA_SKIP_NPM_INSTALL": "1"})
+    result = runner.invoke(
+        cli, ["new", str(target)], env={"MEDUSA_SKIP_NPM_INSTALL": "1"}
+    )
     assert result.exit_code != 0
 
 
@@ -31,7 +34,13 @@ def test_cli_build_and_serve(monkeypatch, tmp_path):
     runner.invoke(cli, ["new", str(project)], env={"MEDUSA_SKIP_NPM_INSTALL": "1"})
     monkeypatch.chdir(project)
 
-    def fake_build_site(root, include_drafts=False, root_url=None, clean_output=True, output_dir_override=None):
+    def fake_build_site(
+        root,
+        include_drafts=False,
+        root_url=None,
+        clean_output=True,
+        output_dir_override=None,
+    ):
         out = root / "output"
         out.mkdir()
         return BuildResult(pages=[], output_dir=out, data={})
@@ -55,7 +64,9 @@ def test_cli_build_and_serve(monkeypatch, tmp_path):
     assert result.exit_code == 0
 
     result = runner.invoke(
-        cli, ["serve", "--drafts", "--port", "5050", "--ws-port", "5051"], catch_exceptions=False
+        cli,
+        ["serve", "--drafts", "--port", "5050", "--ws-port", "5051"],
+        catch_exceptions=False,
     )
     assert result.exit_code == 0
     assert called["port"] == 5050
@@ -92,7 +103,7 @@ def test_try_npm_install(monkeypatch, tmp_path):
     monkeypatch.setenv("MEDUSA_SKIP_NPM_INSTALL", "0")
     monkeypatch.setattr("medusa.cli.shutil.which", lambda cmd: "/usr/bin/npm")
 
-    def fake_run(cmd, cwd=None, check=None, stdout=None, stderr=None):
+    def fake_run(cmd, cwd=None, check=None, capture_output=None):
         called["cmd"] = cmd
         called["cwd"] = cwd
         return subprocess.CompletedProcess(cmd, 0)
@@ -124,7 +135,12 @@ def test_try_npm_install_failure(monkeypatch, tmp_path):
 
 def test_md_helper_functions(tmp_path):
     """Test the helper functions for the md command."""
-    from medusa.cli import _get_content_folders, _get_existing_slugs, _extract_slug, _titleize
+    from medusa.cli import (
+        _extract_slug,
+        _get_content_folders,
+        _get_existing_slugs,
+        _titleize,
+    )
 
     # Set up test directory structure
     site_dir = tmp_path / "site"
@@ -190,18 +206,21 @@ def test_md_command_creates_file(tmp_path, monkeypatch):
         class MockQuestion:
             def ask(self):
                 return next(responses)
+
         return MockQuestion()
 
     def mock_text(*args, **kwargs):
         class MockQuestion:
             def ask(self):
                 return next(responses)
+
         return MockQuestion()
 
     def mock_confirm(*args, **kwargs):
         class MockQuestion:
             def ask(self):
                 return next(responses)
+
         return MockQuestion()
 
     monkeypatch.setattr("medusa.cli.questionary.select", mock_select)
@@ -213,6 +232,7 @@ def test_md_command_creates_file(tmp_path, monkeypatch):
 
     # Check file was created with date prefix
     from datetime import datetime
+
     date_prefix = datetime.now().strftime("%Y-%m-%d")
     expected_file = site_dir / "posts" / f"{date_prefix}-my-new-post.md"
     assert expected_file.exists()
@@ -229,7 +249,9 @@ def test_md_command_duplicate_detection(tmp_path, monkeypatch):
     site_dir.mkdir()
     posts_dir = site_dir / "posts"
     posts_dir.mkdir()
-    (posts_dir / "2024-01-01-existing-post.md").write_text("# Existing", encoding="utf-8")
+    (posts_dir / "2024-01-01-existing-post.md").write_text(
+        "# Existing", encoding="utf-8"
+    )
 
     monkeypatch.chdir(tmp_path)
 
@@ -240,18 +262,21 @@ def test_md_command_duplicate_detection(tmp_path, monkeypatch):
         class MockQuestion:
             def ask(self):
                 return next(responses)
+
         return MockQuestion()
 
     def mock_text(*args, **kwargs):
         class MockQuestion:
             def ask(self):
                 return next(responses)
+
         return MockQuestion()
 
     def mock_confirm(*args, **kwargs):
         class MockQuestion:
             def ask(self):
                 return next(responses)
+
         return MockQuestion()
 
     monkeypatch.setattr("medusa.cli.questionary.select", mock_select)

@@ -15,14 +15,23 @@ from __future__ import annotations
 import re
 import shutil
 import textwrap
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
-
 
 HASHTAG_RE = re.compile(r"#([a-zA-Z][a-zA-Z0-9]{2,}(?:/[a-zA-Z0-9]+)*)")
-_URL_ATTR_RE = re.compile(r'(?P<prefix>\b(?:href|src|action)=["\'])(?P<url>[^"\']+)(?P<suffix>["\'])')
-_URL_SKIP_PREFIXES = ("http://", "https://", "//", "mailto:", "tel:", "#", "javascript:")
+_URL_ATTR_RE = re.compile(
+    r'(?P<prefix>\b(?:href|src|action)=["\'])(?P<url>[^"\']+)(?P<suffix>["\'])'
+)
+_URL_SKIP_PREFIXES = (
+    "http://",
+    "https://",
+    "//",
+    "mailto:",
+    "tel:",
+    "#",
+    "javascript:",
+)
 
 # Map file extensions to language names for syntax highlighting
 CODE_EXTENSIONS: dict[str, str] = {
@@ -131,7 +140,9 @@ def ensure_clean_dir(path: Path) -> None:
             for item in path.rglob("*"):
                 if item.is_file():
                     item.unlink()
-            for item in sorted([p for p in path.rglob("*") if p.is_dir()], reverse=True):
+            for item in sorted(
+                [p for p in path.rglob("*") if p.is_dir()], reverse=True
+            ):
                 item.rmdir()
             path.rmdir()
     path.mkdir(parents=True, exist_ok=True)

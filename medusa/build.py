@@ -11,12 +11,11 @@ Key functions:
 
 from __future__ import annotations
 
-import json
-import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
@@ -24,7 +23,6 @@ from .assets import AssetPipeline
 from .content import ContentProcessor, Page
 from .templates import TemplateEngine
 from .utils import absolutize_html_urls, build_tags_index, ensure_clean_dir
-
 
 DEFAULT_CONFIG = {
     "output_dir": "output",
@@ -60,7 +58,7 @@ def load_config(project_root: Path) -> dict[str, Any]:
     config_path = project_root / "medusa.yaml"
     config = DEFAULT_CONFIG.copy()
     if config_path.exists():
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             loaded = yaml.safe_load(f) or {}
             if isinstance(loaded, dict):
                 config.update(loaded)
@@ -81,7 +79,7 @@ def load_data(project_root: Path) -> dict[str, Any]:
     if not data_dir.exists():
         return data
     for path in sorted(data_dir.glob("*.yaml")):
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             payload = yaml.safe_load(f) or {}
         if not isinstance(payload, dict):
             continue
@@ -114,7 +112,9 @@ def build_site(
     config = load_config(project_root)
     if root_url is not None:
         config["root_url"] = root_url
-    output_dir = output_dir_override or (project_root / config.get("output_dir", "output"))
+    output_dir = output_dir_override or (
+        project_root / config.get("output_dir", "output")
+    )
     if clean_output:
         ensure_clean_dir(output_dir)
     else:

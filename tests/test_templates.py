@@ -1,8 +1,7 @@
 from datetime import datetime, timezone
-from pathlib import Path
 
+from medusa.collections import PageCollection
 from medusa.content import Heading, Page
-from medusa.collections import PageCollection, TagCollection
 from medusa.templates import TemplateEngine, render_toc
 
 
@@ -50,7 +49,9 @@ def test_url_for_without_site_url(tmp_path):
 
 
 def test_url_for_prefers_root_url(tmp_path):
-    engine = TemplateEngine(tmp_path, {"url": "https://site.com"}, root_url="https://root.com")
+    engine = TemplateEngine(
+        tmp_path, {"url": "https://site.com"}, root_url="https://root.com"
+    )
     assert engine._url_for("/assets/app.js") == "https://root.com/assets/app.js"
     assert engine._url_for("posts/") == "https://root.com/posts/"
 
@@ -174,7 +175,10 @@ def test_asset_path_helpers_with_root_url(tmp_path):
     assert engine._js_path("app") == "https://cdn.example.com/assets/js/app.js"
     assert engine._css_path("main") == "https://cdn.example.com/assets/css/main.css"
     assert engine._img_path("hero") == "https://cdn.example.com/assets/images/hero.jpeg"
-    assert engine._font_path("custom") == "https://cdn.example.com/assets/fonts/custom.woff"
+    assert (
+        engine._font_path("custom")
+        == "https://cdn.example.com/assets/fonts/custom.woff"
+    )
 
 
 def test_asset_path_helpers_with_extension_already_present(tmp_path):
@@ -240,64 +244,76 @@ def test_render_toc_empty_for_no_headings(tmp_path):
 
 def test_render_toc_single_heading(tmp_path):
     """Test render_toc with a single heading."""
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="intro", text="Introduction", level=1),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="intro", text="Introduction", level=1),
+        ],
+    )
     result = render_toc(page)
     assert result == '<ul><li><a href="#intro">Introduction</a></li></ul>'
 
 
 def test_render_toc_flat_headings(tmp_path):
     """Test render_toc with multiple same-level headings."""
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="one", text="One", level=2),
-        Heading(id="two", text="Two", level=2),
-        Heading(id="three", text="Three", level=2),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="one", text="One", level=2),
+            Heading(id="two", text="Two", level=2),
+            Heading(id="three", text="Three", level=2),
+        ],
+    )
     result = render_toc(page)
     expected = (
-        '<ul>'
+        "<ul>"
         '<li><a href="#one">One</a></li>'
         '<li><a href="#two">Two</a></li>'
         '<li><a href="#three">Three</a></li>'
-        '</ul>'
+        "</ul>"
     )
     assert result == expected
 
 
 def test_render_toc_nested_headings(tmp_path):
     """Test render_toc with nested heading levels."""
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="intro", text="Introduction", level=1),
-        Heading(id="getting-started", text="Getting Started", level=2),
-        Heading(id="prereq", text="Prerequisites", level=3),
-        Heading(id="install", text="Installation", level=3),
-        Heading(id="advanced", text="Advanced", level=2),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="intro", text="Introduction", level=1),
+            Heading(id="getting-started", text="Getting Started", level=2),
+            Heading(id="prereq", text="Prerequisites", level=3),
+            Heading(id="install", text="Installation", level=3),
+            Heading(id="advanced", text="Advanced", level=2),
+        ],
+    )
     result = render_toc(page)
     expected = (
-        '<ul>'
+        "<ul>"
         '<li><a href="#intro">Introduction</a>'
-        '<ul>'
+        "<ul>"
         '<li><a href="#getting-started">Getting Started</a>'
-        '<ul>'
+        "<ul>"
         '<li><a href="#prereq">Prerequisites</a></li>'
         '<li><a href="#install">Installation</a></li>'
-        '</ul>'
-        '</li>'
+        "</ul>"
+        "</li>"
         '<li><a href="#advanced">Advanced</a></li>'
-        '</ul>'
-        '</li>'
-        '</ul>'
+        "</ul>"
+        "</li>"
+        "</ul>"
     )
     assert result == expected
 
 
 def test_render_toc_escapes_html(tmp_path):
     """Test that render_toc escapes HTML in heading text and IDs."""
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="test-id", text="<script>alert('xss')</script>", level=1),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="test-id", text="<script>alert('xss')</script>", level=1),
+        ],
+    )
     result = render_toc(page)
     assert "<script>" not in result
     assert "&lt;script&gt;" in result
@@ -313,9 +329,12 @@ def test_render_toc_available_in_template(tmp_path):
     )
     engine = TemplateEngine(site, {})
 
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="hello", text="Hello World", level=1),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="hello", text="Hello World", level=1),
+        ],
+    )
     engine.update_collections(PageCollection([page]), {})
     rendered = engine.render_page(page)
     assert '<a href="#hello">Hello World</a>' in rendered
@@ -337,10 +356,13 @@ def test_page_toc_in_template(tmp_path):
     )
     engine = TemplateEngine(site, {})
 
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="intro", text="Introduction", level=1),
-        Heading(id="details", text="Details", level=2),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="intro", text="Introduction", level=1),
+            Heading(id="details", text="Details", level=2),
+        ],
+    )
     engine.update_collections(PageCollection([page]), {})
     rendered = engine.render_page(page)
 

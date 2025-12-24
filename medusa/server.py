@@ -16,13 +16,11 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
-import os
 import shutil
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
 
 import websockets
 from watchdog.events import FileSystemEventHandler
@@ -123,7 +121,12 @@ class DevServer:
         _loop: Event loop for WebSocket handling.
     """
 
-    def __init__(self, project_root: Path, http_port: int | None = None, ws_port: int | None = None):
+    def __init__(
+        self,
+        project_root: Path,
+        http_port: int | None = None,
+        ws_port: int | None = None,
+    ):
         """Initialize the development server.
 
         Args:
@@ -133,7 +136,9 @@ class DevServer:
         self.project_root = project_root
         self.config = load_config(project_root)
         self.output_dir = project_root / self.config.get("output_dir", "output")
-        self._staging_dir = self.output_dir.with_suffix(self.output_dir.suffix + ".staging")
+        self._staging_dir = self.output_dir.with_suffix(
+            self.output_dir.suffix + ".staging"
+        )
         base_http = int(http_port or self.config.get("port", 4000))
         resolved_ws = (
             ws_port
@@ -146,7 +151,9 @@ class DevServer:
         )
         self.ws_port = resolved_ws
         self.http_port = base_http
-        self._reload_script = _ReloadHandler.reload_script_template.format(ws_port=self.ws_port)
+        self._reload_script = _ReloadHandler.reload_script_template.format(
+            ws_port=self.ws_port
+        )
         # Dev server always uses local root_url for absolute asset/page URLs.
         self._root_url = f"http://localhost:{self.http_port}"
         self._observer: Observer | None = None

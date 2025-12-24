@@ -1,9 +1,6 @@
 import asyncio
 import io
-import time
 from pathlib import Path
-
-import pytest
 
 from medusa.server import DevServer, _ChangeHandler, _ReloadHandler
 
@@ -75,7 +72,10 @@ def test_rebuild_waits_before_reload(monkeypatch, tmp_path):
         calls.append(("build", kwargs.get("output_dir_override")))
 
     monkeypatch.setattr("medusa.server.build_site", fake_build)
-    monkeypatch.setattr("medusa.server.DevServer._broadcast_reload", lambda self=server: calls.append("reload"))
+    monkeypatch.setattr(
+        "medusa.server.DevServer._broadcast_reload",
+        lambda self=server: calls.append("reload"),
+    )
     slept = []
     monkeypatch.setattr("medusa.server.time.sleep", lambda secs: slept.append(secs))
 
@@ -94,7 +94,13 @@ def test_rebuild_avoids_cleaning_output(monkeypatch, tmp_path):
     server._compute_signature = lambda: ("sig",)
     called = {}
 
-    def fake_build(root, include_drafts=False, root_url=None, clean_output=True, output_dir_override=None):
+    def fake_build(
+        root,
+        include_drafts=False,
+        root_url=None,
+        clean_output=True,
+        output_dir_override=None,
+    ):
         called["clean_output"] = clean_output
         called["output_dir_override"] = output_dir_override
         # simulate writing into staging
@@ -111,7 +117,9 @@ def test_rebuild_avoids_cleaning_output(monkeypatch, tmp_path):
 def test_rebuild_guard(monkeypatch, tmp_path):
     server = DevServer(tmp_path)
     calls = []
-    monkeypatch.setattr("medusa.server.build_site", lambda *args, **kwargs: calls.append("built"))
+    monkeypatch.setattr(
+        "medusa.server.build_site", lambda *args, **kwargs: calls.append("built")
+    )
     server._broadcast_reload = lambda: calls.append("reloaded")
     server._debounce_seconds = 0.0
 
@@ -290,7 +298,10 @@ def test_start_watcher_and_rebuild(monkeypatch, tmp_path):
     assert any("site" in path for path, _ in scheduled if isinstance(path, str))
 
     calls = []
-    monkeypatch.setattr("medusa.server.build_site", lambda root, include_drafts=False, **kwargs: calls.append(include_drafts))
+    monkeypatch.setattr(
+        "medusa.server.build_site",
+        lambda root, include_drafts=False, **kwargs: calls.append(include_drafts),
+    )
     server._broadcast_reload = lambda: calls.append("reloaded")
     server.rebuild(include_drafts=True)
     assert calls == [True, "reloaded"]
@@ -397,7 +408,9 @@ def test_serve_404_uses_custom_page(tmp_path):
 def test_send_head_serves_directory_index(tmp_path):
     posts = tmp_path / "posts"
     posts.mkdir()
-    (posts / "index.html").write_text("<html><body>index</body></html>", encoding="utf-8")
+    (posts / "index.html").write_text(
+        "<html><body>index</body></html>", encoding="utf-8"
+    )
 
     handler = _ReloadHandler.__new__(_ReloadHandler)
     handler.path = "/posts/"
@@ -462,7 +475,9 @@ def test_send_head_missing_file_triggers_404(tmp_path):
     handler.wfile = io.BytesIO()
 
     called = {}
-    handler.send_response = lambda *args, **kwargs: called.setdefault("resp", []).append(args[0])
+    handler.send_response = lambda *args, **kwargs: called.setdefault(
+        "resp", []
+    ).append(args[0])
     handler.send_header = lambda *args, **kwargs: None
     handler.end_headers = lambda: None
 
@@ -497,7 +512,9 @@ def test_directory_without_index_returns_404(tmp_path):
     def fake_send_error(code, message=None):
         called["error"] = code
 
-    handler.send_response = lambda code, message=None: called.setdefault("responses", []).append(code)
+    handler.send_response = lambda code, message=None: called.setdefault(
+        "responses", []
+    ).append(code)
     handler.send_header = lambda *args, **kwargs: None
     handler.end_headers = lambda: None
     handler.send_error = fake_send_error
