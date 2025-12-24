@@ -1,4 +1,4 @@
-.PHONY: build publish clean install dev test
+.PHONY: build publish clean install dev test lint
 
 # Build the package
 build: clean
@@ -27,10 +27,11 @@ install:
 dev:
 	pip install -e ".[dev]"
 
-# Run tests
+# Run tests with coverage (100% minimum)
 test:
-	pytest
+	pytest --cov=medusa --cov-report=term-missing --cov-fail-under=100
 
-# Run tests with coverage
-coverage:
-	pytest --cov=medusa --cov-report=term-missing
+# Run linter and fix issues
+lint:
+	ruff check --fix .
+	ruff format .

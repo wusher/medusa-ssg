@@ -91,8 +91,14 @@ def test_path_helpers_and_tags_index(tmp_path):
 
 
 def test_join_and_absolutize_urls():
-    assert utils.join_root_url("https://example.com", "/posts/") == "https://example.com/posts/"
-    assert utils.join_root_url("https://example.com/blog/", "posts/") == "https://example.com/blog/posts/"
+    assert (
+        utils.join_root_url("https://example.com", "/posts/")
+        == "https://example.com/posts/"
+    )
+    assert (
+        utils.join_root_url("https://example.com/blog/", "posts/")
+        == "https://example.com/blog/posts/"
+    )
     assert utils.join_root_url("", "/posts/") == "/posts/"
 
     html = '<a href="/about/"></a><img src="https://cdn.com/x.png"><a href="#frag"></a>'

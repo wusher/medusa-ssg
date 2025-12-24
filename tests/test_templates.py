@@ -1,8 +1,7 @@
 from datetime import datetime, timezone
-from pathlib import Path
 
+from medusa.collections import PageCollection
 from medusa.content import Heading, Page
-from medusa.collections import PageCollection, TagCollection
 from medusa.templates import TemplateEngine, render_toc
 
 
@@ -50,7 +49,9 @@ def test_url_for_without_site_url(tmp_path):
 
 
 def test_url_for_prefers_root_url(tmp_path):
-    engine = TemplateEngine(tmp_path, {"url": "https://site.com"}, root_url="https://root.com")
+    engine = TemplateEngine(
+        tmp_path, {"url": "https://site.com"}, root_url="https://root.com"
+    )
     assert engine._url_for("/assets/app.js") == "https://root.com/assets/app.js"
     assert engine._url_for("posts/") == "https://root.com/posts/"
 
@@ -174,7 +175,10 @@ def test_asset_path_helpers_with_root_url(tmp_path):
     assert engine._js_path("app") == "https://cdn.example.com/assets/js/app.js"
     assert engine._css_path("main") == "https://cdn.example.com/assets/css/main.css"
     assert engine._img_path("hero") == "https://cdn.example.com/assets/images/hero.jpeg"
-    assert engine._font_path("custom") == "https://cdn.example.com/assets/fonts/custom.woff"
+    assert (
+        engine._font_path("custom")
+        == "https://cdn.example.com/assets/fonts/custom.woff"
+    )
 
 
 def test_asset_path_helpers_with_extension_already_present(tmp_path):
@@ -240,64 +244,76 @@ def test_render_toc_empty_for_no_headings(tmp_path):
 
 def test_render_toc_single_heading(tmp_path):
     """Test render_toc with a single heading."""
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="intro", text="Introduction", level=1),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="intro", text="Introduction", level=1),
+        ],
+    )
     result = render_toc(page)
     assert result == '<ul><li><a href="#intro">Introduction</a></li></ul>'
 
 
 def test_render_toc_flat_headings(tmp_path):
     """Test render_toc with multiple same-level headings."""
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="one", text="One", level=2),
-        Heading(id="two", text="Two", level=2),
-        Heading(id="three", text="Three", level=2),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="one", text="One", level=2),
+            Heading(id="two", text="Two", level=2),
+            Heading(id="three", text="Three", level=2),
+        ],
+    )
     result = render_toc(page)
     expected = (
-        '<ul>'
+        "<ul>"
         '<li><a href="#one">One</a></li>'
         '<li><a href="#two">Two</a></li>'
         '<li><a href="#three">Three</a></li>'
-        '</ul>'
+        "</ul>"
     )
     assert result == expected
 
 
 def test_render_toc_nested_headings(tmp_path):
     """Test render_toc with nested heading levels."""
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="intro", text="Introduction", level=1),
-        Heading(id="getting-started", text="Getting Started", level=2),
-        Heading(id="prereq", text="Prerequisites", level=3),
-        Heading(id="install", text="Installation", level=3),
-        Heading(id="advanced", text="Advanced", level=2),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="intro", text="Introduction", level=1),
+            Heading(id="getting-started", text="Getting Started", level=2),
+            Heading(id="prereq", text="Prerequisites", level=3),
+            Heading(id="install", text="Installation", level=3),
+            Heading(id="advanced", text="Advanced", level=2),
+        ],
+    )
     result = render_toc(page)
     expected = (
-        '<ul>'
+        "<ul>"
         '<li><a href="#intro">Introduction</a>'
-        '<ul>'
+        "<ul>"
         '<li><a href="#getting-started">Getting Started</a>'
-        '<ul>'
+        "<ul>"
         '<li><a href="#prereq">Prerequisites</a></li>'
         '<li><a href="#install">Installation</a></li>'
-        '</ul>'
-        '</li>'
+        "</ul>"
+        "</li>"
         '<li><a href="#advanced">Advanced</a></li>'
-        '</ul>'
-        '</li>'
-        '</ul>'
+        "</ul>"
+        "</li>"
+        "</ul>"
     )
     assert result == expected
 
 
 def test_render_toc_escapes_html(tmp_path):
     """Test that render_toc escapes HTML in heading text and IDs."""
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="test-id", text="<script>alert('xss')</script>", level=1),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="test-id", text="<script>alert('xss')</script>", level=1),
+        ],
+    )
     result = render_toc(page)
     assert "<script>" not in result
     assert "&lt;script&gt;" in result
@@ -313,9 +329,12 @@ def test_render_toc_available_in_template(tmp_path):
     )
     engine = TemplateEngine(site, {})
 
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="hello", text="Hello World", level=1),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="hello", text="Hello World", level=1),
+        ],
+    )
     engine.update_collections(PageCollection([page]), {})
     rendered = engine.render_page(page)
     assert '<a href="#hello">Hello World</a>' in rendered
@@ -337,12 +356,85 @@ def test_page_toc_in_template(tmp_path):
     )
     engine = TemplateEngine(site, {})
 
-    page = _make_page_with_toc(tmp_path, [
-        Heading(id="intro", text="Introduction", level=1),
-        Heading(id="details", text="Details", level=2),
-    ])
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="intro", text="Introduction", level=1),
+            Heading(id="details", text="Details", level=2),
+        ],
+    )
     engine.update_collections(PageCollection([page]), {})
     rendered = engine.render_page(page)
 
     assert '<a href="#intro">Introduction (h1)</a>' in rendered
     assert '<a href="#details">Details (h2)</a>' in rendered
+
+
+def test_render_toc_from_headings_empty():
+    """Test _render_toc_from_headings with empty list."""
+    from medusa.templates import _render_toc_from_headings
+
+    result = _render_toc_from_headings([])
+    assert result == ""
+
+
+def test_render_toc_skip_levels(tmp_path):
+    """Test render_toc when skipping heading levels (e.g., h1 -> h3)."""
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="intro", text="Introduction", level=1),
+            Heading(id="deep", text="Deep Nested", level=3),  # Skip level 2
+            Heading(id="back", text="Back Up", level=2),
+        ],
+    )
+    result = render_toc(page)
+    # Should still generate valid nested structure
+    assert '<a href="#intro">Introduction</a>' in result
+    assert '<a href="#deep">Deep Nested</a>' in result
+    assert '<a href="#back">Back Up</a>' in result
+    assert "<ul>" in result
+
+
+def test_pygments_css_returns_styles():
+    """Test _pygments_css returns CSS styles when Pygments is available."""
+    from medusa.templates import TemplateEngine
+
+    result = TemplateEngine._pygments_css()
+    # Should return CSS styles containing .highlight class
+    assert isinstance(result, str)
+    assert ".highlight" in result or result != ""  # Either has content or is non-empty
+
+
+def test_pygments_css_import_error():
+    """Test _pygments_css returns empty string when Pygments import fails."""
+    import sys
+
+    from medusa.templates import TemplateEngine
+
+    # Save all pygments-related modules
+    saved_modules = {}
+    to_remove = [k for k in sys.modules if k.startswith("pygments")]
+    for key in to_remove:
+        saved_modules[key] = sys.modules.pop(key)
+
+    # Create a module that raises ImportError on attribute access
+    class BrokenModule:
+        def __getattr__(self, name):
+            raise ImportError(f"mocked ImportError for {name}")
+
+    # Insert the broken module
+    sys.modules["pygments"] = BrokenModule()
+    sys.modules["pygments.formatters"] = BrokenModule()
+
+    try:
+        # Call the actual method - it should handle ImportError gracefully
+        result = TemplateEngine._pygments_css()
+        assert result == ""
+    finally:
+        # Clean up broken modules
+        for key in ["pygments", "pygments.formatters"]:
+            if key in sys.modules:
+                del sys.modules[key]
+        # Restore original modules
+        sys.modules.update(saved_modules)

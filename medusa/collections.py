@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
-from typing import Iterable
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 from .content import Page
 
@@ -23,19 +22,19 @@ class PageCollection(Sequence[Page]):
     def __getitem__(self, item):
         return self._pages[item]
 
-    def group(self, name: str) -> "PageCollection":
+    def group(self, name: str) -> PageCollection:
         return PageCollection(p for p in self._pages if p.group == name)
 
-    def with_tag(self, tag: str) -> "PageCollection":
+    def with_tag(self, tag: str) -> PageCollection:
         return PageCollection(p for p in self._pages if tag in p.tags)
 
-    def drafts(self) -> "PageCollection":
+    def drafts(self) -> PageCollection:
         return PageCollection(p for p in self._pages if p.draft)
 
-    def published(self) -> "PageCollection":
+    def published(self) -> PageCollection:
         return PageCollection(p for p in self._pages if not p.draft)
 
-    def sorted(self, reverse: bool = True) -> "PageCollection":
+    def sorted(self, reverse: bool = True) -> PageCollection:
         if self._sorted_cache is None or reverse is False:
             sorted_pages = sorted(self._pages, key=lambda p: p.date, reverse=reverse)
             if reverse:
@@ -43,7 +42,7 @@ class PageCollection(Sequence[Page]):
             return PageCollection(sorted_pages)
         return self._sorted_cache
 
-    def latest(self, count: int = 5) -> "PageCollection":
+    def latest(self, count: int = 5) -> PageCollection:
         return PageCollection(self.sorted()[:count])
 
     def __repr__(self) -> str:  # pragma: no cover - for debugging

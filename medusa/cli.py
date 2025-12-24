@@ -12,18 +12,17 @@ Commands:
 
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
 import click
-import json
-import os
 import questionary
-import shutil
-import subprocess
 
 from . import __version__
-
 
 # Path to the default template directory
 _TEMPLATES_DIR = Path(__file__).parent / "templates" / "default"
@@ -147,7 +146,9 @@ def md():
     target_path = target_dir / filename
 
     if target_path.exists():
-        raise click.ClickException(f"File already exists: {target_path.relative_to(project_root)}")
+        raise click.ClickException(
+            f"File already exists: {target_path.relative_to(project_root)}"
+        )
 
     # Also check for slug collision (same name with different date)
     existing_slugs = _get_existing_slugs(target_dir)
@@ -211,14 +212,16 @@ def _titleize(name: str) -> str:
 
 def _questionary_style():
     """Return consistent questionary style."""
-    return questionary.Style([
-        ("qmark", "fg:cyan bold"),
-        ("question", "bold"),
-        ("answer", "fg:cyan"),
-        ("pointer", "fg:cyan bold"),
-        ("highlighted", "fg:cyan bold"),
-        ("selected", "fg:cyan"),
-    ])
+    return questionary.Style(
+        [
+            ("qmark", "fg:cyan bold"),
+            ("question", "bold"),
+            ("answer", "fg:cyan"),
+            ("pointer", "fg:cyan bold"),
+            ("highlighted", "fg:cyan bold"),
+            ("selected", "fg:cyan"),
+        ]
+    )
 
 
 def main():
@@ -273,8 +276,7 @@ def _try_npm_install(root: Path) -> None:
             [npm_bin, "install"],
             cwd=root,
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
     except Exception:
         # Non-fatal: user can run npm install manually

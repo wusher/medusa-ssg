@@ -10,12 +10,12 @@ Key classes:
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, List
-import os
-import re
+from typing import Any
 
 import mistune
 import yaml
@@ -26,14 +26,12 @@ from .utils import (
     first_paragraph,
     get_code_language,
     is_code_file,
-    is_internal_path,
     is_markdown,
     is_template,
     slugify,
     strip_hashtags,
     titleize,
 )
-
 
 IMAGE_SRC_RE = re.compile(r'<img\s+[^>]*src="([^"]+)"', re.IGNORECASE)
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
@@ -147,7 +145,7 @@ class Page:
     url: str
     slug: str
     date: datetime
-    tags: List[str]
+    tags: list[str]
     draft: bool
     layout: str
     group: str
@@ -156,7 +154,7 @@ class Page:
     filename: str
     source_type: str  # "markdown" | "jinja" | "code"
     frontmatter: dict[str, Any] = field(default_factory=dict)
-    toc: List[Heading] = field(default_factory=list)
+    toc: list[Heading] = field(default_factory=list)
 
 
 def _rewrite_image_path(src: str, folder: str) -> str:
@@ -192,7 +190,7 @@ class _HighlightRenderer(mistune.HTMLRenderer):
         """
         super().__init__(escape=False)
         self.folder = folder
-        self.headings: List[Heading] = []
+        self.headings: list[Heading] = []
         self._heading_id_counts: dict[str, int] = {}
 
     def heading(self, text: str, level: int, **attrs) -> str:
@@ -219,7 +217,7 @@ class _HighlightRenderer(mistune.HTMLRenderer):
         # Track this heading for TOC
         self.headings.append(Heading(id=heading_id, text=text, level=level))
 
-        return f"<h{level} id=\"{heading_id}\">{text}</h{level}>\n"
+        return f'<h{level} id="{heading_id}">{text}</h{level}>\n'
 
     def image(self, text: str, url: str | None = None, title: str | None = None):
         """Render an image tag with rewritten source.
@@ -248,8 +246,8 @@ class _HighlightRenderer(mistune.HTMLRenderer):
         if info:
             try:
                 from pygments import highlight
-                from pygments.lexers import get_lexer_by_name
                 from pygments.formatters import HtmlFormatter
+                from pygments.lexers import get_lexer_by_name
 
                 lexer = get_lexer_by_name(info, stripall=True)
                 formatter = HtmlFormatter(nowrap=False, cssclass="highlight")
@@ -277,7 +275,7 @@ class ContentProcessor:
         """
         self.site_dir = site_dir
 
-    def load(self, include_drafts: bool = False) -> List[Page]:
+    def load(self, include_drafts: bool = False) -> list[Page]:
         """Load all content files and create Page objects.
 
         Args:
@@ -286,7 +284,7 @@ class ContentProcessor:
         Returns:
             List of Page objects.
         """
-        pages: List[Page] = []
+        pages: list[Page] = []
         for path in self._iter_source_files(include_drafts):
             draft = path.name.startswith("_")
             page = self._build_page(path, draft=draft)
@@ -344,7 +342,7 @@ class ContentProcessor:
         slug = slugify(path.stem)
         url = self._derive_url(rel, slug)
 
-        toc: List[Heading] = []
+        toc: list[Heading] = []
         excerpt: str = ""
 
         if is_code_file(path):
@@ -353,7 +351,7 @@ class ContentProcessor:
             markdown_source = f"```{lang}\n{body}\n```"
             content, toc = self._render_markdown(markdown_source, folder)
             title = titleize(filename)
-            tags: List[str] = []
+            tags: list[str] = []
             description = self._extract_code_description(body)
             source_type = "code"
         elif is_markdown(path):
@@ -393,7 +391,7 @@ class ContentProcessor:
             toc=toc,
         )
 
-    def _render_markdown(self, text: str, folder: str) -> tuple[str, List[Heading]]:
+    def _render_markdown(self, text: str, folder: str) -> tuple[str, list[Heading]]:
         """Render markdown text to HTML and extract headings.
 
         Args:

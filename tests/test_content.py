@@ -1,7 +1,12 @@
 from datetime import datetime
 from pathlib import Path
 
-from medusa.content import ContentProcessor, Heading, _extract_excerpt, _generate_heading_id, _rewrite_image_path
+from medusa.content import (
+    ContentProcessor,
+    _extract_excerpt,
+    _generate_heading_id,
+    _rewrite_image_path,
+)
 
 
 def create_site(tmp_path: Path) -> Path:
@@ -12,7 +17,9 @@ def create_site(tmp_path: Path) -> Path:
     (site / "pages").mkdir()
     (site / "_hidden").mkdir()
     (site / "_partials" / "header.html.jinja").write_text("header", encoding="utf-8")
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
 
     (site / "index.md").write_text(
         "# Home Page\n\nWelcome to the #web frontend.\n\n![Logo](logo.png)",
@@ -20,14 +27,18 @@ def create_site(tmp_path: Path) -> Path:
     )
     (site / "pages" / "about.md").write_text("# About Us", encoding="utf-8")
     (site / "pages" / "index.md").write_text("# Pages Index", encoding="utf-8")
-    (site / "posts" / "2024-01-15-my-post.md").write_text("# Post Title\n\nBody text #python", encoding="utf-8")
+    (site / "posts" / "2024-01-15-my-post.md").write_text(
+        "# Post Title\n\nBody text #python", encoding="utf-8"
+    )
     (site / "posts" / "_draft.md").write_text("# Draft", encoding="utf-8")
-    (site / "contact[hero].html.jinja").write_text("<h1>{{ data.title }}</h1>", encoding="utf-8")
+    (site / "contact[hero].html.jinja").write_text(
+        "<h1>{{ data.title }}</h1>", encoding="utf-8"
+    )
     (site / "raw.html.jinja").write_text('<img src="inline.png">', encoding="utf-8")
     (site / "_hidden" / "secret.md").write_text("# Secret", encoding="utf-8")
     (site / "notes.txt").write_text("ignore", encoding="utf-8")
     (site / "rich.md").write_text(
-        "# Rich\n\n<div class=\"hero\"><span>HTML stays</span></div>\n", encoding="utf-8"
+        '# Rich\n\n<div class="hero"><span>HTML stays</span></div>\n', encoding="utf-8"
     )
     return site
 
@@ -42,7 +53,7 @@ def test_content_processing_builds_pages(tmp_path):
     assert all(not p.draft for p in pages)
 
     page = next(p for p in pages if p.url == "/")
-    assert "img src=\"/assets/images/logo.png\"" in page.content
+    assert 'img src="/assets/images/logo.png"' in page.content
     assert page.tags == ["web"]
     assert page.group == ""
     assert page.layout == "default"
@@ -71,7 +82,10 @@ def test_include_drafts_and_url_rules(tmp_path):
     assert draft.url == "/posts/draft/"
 
     assert _rewrite_image_path("/static/logo.png", "posts") == "/static/logo.png"
-    assert _rewrite_image_path("icons/logo.png", "posts") == "/assets/images/posts/icons/logo.png"
+    assert (
+        _rewrite_image_path("icons/logo.png", "posts")
+        == "/assets/images/posts/icons/logo.png"
+    )
 
 
 def test_rewrite_inline_images(tmp_path):
@@ -88,7 +102,9 @@ def test_layout_resolution_specificity(tmp_path):
     (site / "_layouts" / "about.html.jinja").write_text("a", encoding="utf-8")
     (site / "_layouts" / "posts.html.jinja").write_text("p", encoding="utf-8")
     (site / "_layouts" / "posts").mkdir()
-    (site / "_layouts" / "posts" / "happy.html.jinja").write_text("ph", encoding="utf-8")
+    (site / "_layouts" / "posts" / "happy.html.jinja").write_text(
+        "ph", encoding="utf-8"
+    )
 
     processor = ContentProcessor(site)
 
@@ -123,7 +139,9 @@ def test_code_file_in_subfolder_renders(tmp_path):
     """Test that code files in subfolders are rendered with syntax highlighting."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
     (site / "snippets").mkdir()
 
     # Code file in subfolder should be rendered
@@ -147,7 +165,9 @@ def test_code_file_in_root_ignored(tmp_path):
     """Test that code files in root site/ directory are ignored."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
 
     # Code file in root should NOT be rendered
     (site / "script.py").write_text('print("Ignored")', encoding="utf-8")
@@ -165,10 +185,14 @@ def test_code_file_date_extraction(tmp_path):
     """Test date extraction from code file names."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
     (site / "tutorials").mkdir()
 
-    (site / "tutorials" / "2024-06-15-my-script.py").write_text("x = 1", encoding="utf-8")
+    (site / "tutorials" / "2024-06-15-my-script.py").write_text(
+        "x = 1", encoding="utf-8"
+    )
 
     pages = ContentProcessor(site).load()
     page = next(p for p in pages if "my-script" in p.url)
@@ -183,15 +207,23 @@ def test_code_file_description_extraction(tmp_path):
     """Test description extraction from code comments."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
     (site / "code").mkdir()
 
     # Python comment
-    (site / "code" / "py-comment.py").write_text("# A helpful script\nx = 1", encoding="utf-8")
+    (site / "code" / "py-comment.py").write_text(
+        "# A helpful script\nx = 1", encoding="utf-8"
+    )
     # Python docstring
-    (site / "code" / "py-docstring.py").write_text('"""A useful module."""\nx = 1', encoding="utf-8")
+    (site / "code" / "py-docstring.py").write_text(
+        '"""A useful module."""\nx = 1', encoding="utf-8"
+    )
     # JS comment
-    (site / "code" / "js-comment.js").write_text("// JavaScript helper\nconst x = 1;", encoding="utf-8")
+    (site / "code" / "js-comment.js").write_text(
+        "// JavaScript helper\nconst x = 1;", encoding="utf-8"
+    )
 
     pages = ContentProcessor(site).load()
 
@@ -209,7 +241,9 @@ def test_frontmatter_extraction(tmp_path):
     """Test YAML frontmatter is parsed and available as dict."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
     (site / "posts").mkdir()
 
     (site / "posts" / "with-frontmatter.md").write_text(
@@ -247,7 +281,9 @@ def test_frontmatter_empty_or_missing(tmp_path):
     """Test handling of empty or missing frontmatter."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
 
     # Empty frontmatter
     (site / "empty-fm.md").write_text(
@@ -286,7 +322,9 @@ def test_toc_extraction_from_markdown(tmp_path):
     """Test that TOC is extracted from markdown headings."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
 
     (site / "article.md").write_text(
         """# Introduction
@@ -345,7 +383,9 @@ def test_toc_handles_duplicate_headings(tmp_path):
     """Test that duplicate headings get unique IDs."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
 
     (site / "duplicates.md").write_text(
         """# Overview
@@ -387,7 +427,9 @@ def test_toc_empty_for_no_headings(tmp_path):
     """Test that pages without headings have empty TOC."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
 
     (site / "no-headings.md").write_text(
         "Just some paragraph text.\n\nAnother paragraph.",
@@ -404,7 +446,9 @@ def test_toc_empty_for_jinja_templates(tmp_path):
     """Test that jinja templates have empty TOC (no markdown parsing)."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
 
     (site / "template.html.jinja").write_text(
         "<h1>Heading One</h1><h2>Heading Two</h2>",
@@ -451,7 +495,9 @@ def test_excerpt_from_markdown_page(tmp_path):
     """Test that excerpt is extracted from markdown pages."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
 
     (site / "post.md").write_text(
         """# My Blog Post
@@ -469,14 +515,19 @@ More content here.
     pages = ContentProcessor(site).load()
     page = next(p for p in pages if "post" in p.url)
 
-    assert page.excerpt == "This is the introduction paragraph that should become the excerpt. It spans multiple lines but should be collapsed."
+    assert (
+        page.excerpt
+        == "This is the introduction paragraph that should become the excerpt. It spans multiple lines but should be collapsed."
+    )
 
 
 def test_excerpt_empty_for_jinja_templates(tmp_path):
     """Test that jinja templates have empty excerpt."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
 
     (site / "page.html.jinja").write_text(
         "<h1>Title</h1><p>Some content</p>",
@@ -493,7 +544,9 @@ def test_excerpt_empty_for_code_files(tmp_path):
     """Test that code files have empty excerpt."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
     (site / "snippets").mkdir()
 
     (site / "snippets" / "example.py").write_text(
@@ -511,7 +564,9 @@ def test_excerpt_skips_hashtags(tmp_path):
     """Test that hashtags are stripped before extracting excerpt."""
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
-    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
 
     (site / "tagged.md").write_text(
         """# Post with Tags
@@ -529,3 +584,266 @@ More content.
     # Hashtags should be stripped
     assert "#python" not in page.excerpt
     assert "This post is about" in page.excerpt
+
+
+def test_frontmatter_non_dict_yaml(tmp_path):
+    """Test that frontmatter with non-dict YAML returns empty dict."""
+    from medusa.content import _extract_frontmatter
+
+    # YAML that parses to a list
+    text = """---
+- item1
+- item2
+---
+
+# Content
+"""
+    frontmatter, body = _extract_frontmatter(text)
+    assert frontmatter == {}
+    assert "# Content" in body
+
+
+def test_frontmatter_invalid_yaml(tmp_path):
+    """Test that invalid YAML frontmatter returns empty dict."""
+    from medusa.content import _extract_frontmatter
+
+    # Invalid YAML syntax
+    text = """---
+key: value
+  invalid: indentation
+---
+
+# Content
+"""
+    frontmatter, body = _extract_frontmatter(text)
+    assert frontmatter == {}
+    assert "# Content" in body
+
+
+def test_code_description_empty_file(tmp_path):
+    """Test description extraction from empty code file."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Empty file
+    (site / "code" / "empty.py").write_text("", encoding="utf-8")
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "empty" in p.url)
+    assert page.description == ""
+
+
+def test_code_description_multiline_docstring(tmp_path):
+    """Test description extraction from multi-line docstrings."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Multi-line docstring - second line has content
+    (site / "code" / "multiline.py").write_text(
+        '''"""
+This is a multiline docstring description.
+"""
+x = 1
+''',
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "multiline" in p.url)
+    assert page.description == "This is a multiline docstring description."
+
+
+def test_code_description_docstring_with_empty_lines(tmp_path):
+    """Test description extraction from docstring with empty lines before content."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Docstring with delimiter on same line as content start
+    (site / "code" / "edge.py").write_text(
+        '''"""
+"""
+x = 1
+''',
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "edge" in p.url)
+    # Empty docstring returns empty description
+    assert page.description == ""
+
+
+def test_code_description_shebang_ignored(tmp_path):
+    """Test that shebang lines are not used as description."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Shebang followed by no other comment
+    (site / "code" / "shebang.py").write_text(
+        """#!/usr/bin/env python
+x = 1
+""",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "shebang" in p.url)
+    # Shebang should not be used as description
+    assert page.description == ""
+
+
+def test_code_description_triple_single_quotes(tmp_path):
+    """Test description extraction from single-quote docstrings."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Single-line docstring with single quotes
+    (site / "code" / "singlequotes.py").write_text(
+        """'''Single line docstring.'''
+x = 1
+""",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "singlequotes" in p.url)
+    assert page.description == "Single line docstring."
+
+
+def test_code_block_with_invalid_language(tmp_path):
+    """Test code block rendering falls back when lexer not found."""
+    from medusa.content import _HighlightRenderer
+
+    renderer = _HighlightRenderer("")
+    # Use a made-up language that doesn't exist
+    result = renderer.block_code("code here", info="nonexistent_language_xyz123")
+    # Should fall back to plain code block
+    assert "<pre><code" in result
+    assert "code here" in result
+
+
+def test_code_description_multiline_with_delimiter_break(tmp_path):
+    """Test multi-line docstring where delimiter is found on subsequent line."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Multi-line docstring with empty content line before delimiter
+    (site / "code" / "delimbreak.py").write_text(
+        '''"""
+Content line here.
+"""
+x = 1
+''',
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "delimbreak" in p.url)
+    assert page.description == "Content line here."
+
+
+def test_code_description_multiline_only_delimiter(tmp_path):
+    """Test multi-line docstring with only delimiter lines (empty docstring)."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Docstring that immediately closes on next line
+    (site / "code" / "onlydelim.py").write_text(
+        '''"""
+"""
+x = 1
+''',
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "onlydelim" in p.url)
+    # Empty docstring, so no description
+    assert page.description == ""
+
+
+def test_code_description_multiline_empty_lines_then_content(tmp_path):
+    """Test multi-line docstring with empty lines before content."""
+    from medusa.content import ContentProcessor
+
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Docstring with empty lines before content (content never reached due to break)
+    (site / "code" / "emptylines.py").write_text(
+        '"""\n\n"""\nx = 1\n',
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "emptylines" in p.url)
+    # Empty line is skipped, then delimiter is found
+    assert page.description == ""
+
+
+def test_code_block_without_language_info():
+    """Test code block rendering without language specification."""
+    from medusa.content import _HighlightRenderer
+
+    renderer = _HighlightRenderer("")
+    # No language info - should use plain fallback
+    result = renderer.block_code("plain code", info=None)
+    assert "<pre><code>" in result
+    assert "plain code" in result
+
+    # Empty string language
+    result = renderer.block_code("plain code", info="")
+    assert "<pre><code>" in result
+    assert "plain code" in result
+
+
+def test_code_description_single_line_docstring_only(tmp_path):
+    """Test file that is just a docstring opener (edge case for empty lines[1:])."""
+    from medusa.content import ContentProcessor
+
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # File with only a docstring opener on one line
+    (site / "code" / "singleline.py").write_text('"""', encoding="utf-8")
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "singleline" in p.url)
+    # Single line with just """, lines[1:] is empty
+    assert page.description == ""
