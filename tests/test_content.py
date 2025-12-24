@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from medusa.content import ContentProcessor, Heading, _generate_heading_id, _rewrite_image_path
+from medusa.content import ContentProcessor, Heading, _extract_excerpt, _generate_heading_id, _rewrite_image_path
 
 
 def create_site(tmp_path: Path) -> Path:
@@ -416,3 +416,116 @@ def test_toc_empty_for_jinja_templates(tmp_path):
 
     # Jinja templates are not parsed for markdown, so no TOC
     assert page.toc == []
+
+
+def test_extract_excerpt():
+    """Test excerpt extraction from markdown text."""
+    # Basic case: heading followed by paragraph
+    text = "# Title\n\nThis is the first paragraph.\n\nSecond paragraph."
+    assert _extract_excerpt(text) == "This is the first paragraph."
+
+    # Multiple headings before first paragraph
+    text = "# Title\n\n## Subtitle\n\nActual content here."
+    assert _extract_excerpt(text) == "Actual content here."
+
+    # Multiline paragraph gets collapsed
+    text = "# Title\n\nFirst line\nof the paragraph\nspans multiple lines."
+    assert _extract_excerpt(text) == "First line of the paragraph spans multiple lines."
+
+    # Skip images
+    text = "# Title\n\n![alt](image.png)\n\nActual paragraph."
+    assert _extract_excerpt(text) == "Actual paragraph."
+
+    # Skip code blocks
+    text = "# Title\n\n```python\ncode\n```\n\nActual paragraph."
+    assert _extract_excerpt(text) == "Actual paragraph."
+
+    # Empty text
+    assert _extract_excerpt("") == ""
+
+    # Only headings
+    assert _extract_excerpt("# Title\n\n## Subtitle") == ""
+
+
+def test_excerpt_from_markdown_page(tmp_path):
+    """Test that excerpt is extracted from markdown pages."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+
+    (site / "post.md").write_text(
+        """# My Blog Post
+
+This is the introduction paragraph that should become the excerpt.
+It spans multiple lines but should be collapsed.
+
+## Section One
+
+More content here.
+""",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "post" in p.url)
+
+    assert page.excerpt == "This is the introduction paragraph that should become the excerpt. It spans multiple lines but should be collapsed."
+
+
+def test_excerpt_empty_for_jinja_templates(tmp_path):
+    """Test that jinja templates have empty excerpt."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+
+    (site / "page.html.jinja").write_text(
+        "<h1>Title</h1><p>Some content</p>",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "page" in p.url)
+
+    assert page.excerpt == ""
+
+
+def test_excerpt_empty_for_code_files(tmp_path):
+    """Test that code files have empty excerpt."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+    (site / "snippets").mkdir()
+
+    (site / "snippets" / "example.py").write_text(
+        "# A Python script\nprint('hello')",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "example" in p.url)
+
+    assert page.excerpt == ""
+
+
+def test_excerpt_skips_hashtags(tmp_path):
+    """Test that hashtags are stripped before extracting excerpt."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+
+    (site / "tagged.md").write_text(
+        """# Post with Tags
+
+This post is about #python and #testing.
+
+More content.
+""",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "tagged" in p.url)
+
+    # Hashtags should be stripped
+    assert "#python" not in page.excerpt
+    assert "This post is about" in page.excerpt

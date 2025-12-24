@@ -91,6 +91,31 @@ def _generate_heading_id(text: str) -> str:
     return slug.strip("-")
 
 
+def _extract_excerpt(text: str) -> str:
+    """Extract the first paragraph from markdown text.
+
+    Skips the title heading (# Title) and returns the first actual paragraph.
+
+    Args:
+        text: Markdown text content.
+
+    Returns:
+        The first paragraph as plain text, or empty string if none found.
+    """
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    for para in paragraphs:
+        # Skip headings
+        if para.startswith("#"):
+            continue
+        # Skip images, code blocks, and other non-text elements
+        if para.startswith(("![", "```", "---")):
+            continue
+        # Clean up the paragraph: collapse whitespace
+        cleaned = " ".join(para.split())
+        return cleaned
+    return ""
+
+
 @dataclass
 class Page:
     """Represents a site page with all its metadata and content.
@@ -100,6 +125,7 @@ class Page:
         body: Raw body text from the source file.
         content: Rendered HTML content.
         description: Short description, often from first paragraph.
+        excerpt: Full first paragraph (markdown files only).
         url: URL path for the page.
         slug: URL-friendly slug.
         date: Publication date.
@@ -117,6 +143,7 @@ class Page:
     body: str
     content: str
     description: str
+    excerpt: str
     url: str
     slug: str
     date: datetime
@@ -318,6 +345,7 @@ class ContentProcessor:
         url = self._derive_url(rel, slug)
 
         toc: List[Heading] = []
+        excerpt: str = ""
 
         if is_code_file(path):
             # Code files: wrap in code block and render
@@ -334,6 +362,7 @@ class ContentProcessor:
             content, toc = self._render_markdown(render_source, folder)
             title = self._resolve_title(body, filename)
             description = first_paragraph(strip_hashtags(body))
+            excerpt = _extract_excerpt(strip_hashtags(body))
             source_type = "markdown"
         else:
             tags = extract_tags(body)
@@ -348,6 +377,7 @@ class ContentProcessor:
             body=body,
             content=self._rewrite_inline_images(content, folder),
             description=description,
+            excerpt=excerpt,
             url=url,
             slug=slug,
             date=date,
