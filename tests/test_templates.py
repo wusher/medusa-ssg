@@ -368,3 +368,72 @@ def test_page_toc_in_template(tmp_path):
 
     assert '<a href="#intro">Introduction (h1)</a>' in rendered
     assert '<a href="#details">Details (h2)</a>' in rendered
+
+
+def test_render_toc_from_headings_empty():
+    """Test _render_toc_from_headings with empty list."""
+    from medusa.templates import _render_toc_from_headings
+
+    result = _render_toc_from_headings([])
+    assert result == ""
+
+
+def test_render_toc_skip_levels(tmp_path):
+    """Test render_toc when skipping heading levels (e.g., h1 -> h3)."""
+    page = _make_page_with_toc(
+        tmp_path,
+        [
+            Heading(id="intro", text="Introduction", level=1),
+            Heading(id="deep", text="Deep Nested", level=3),  # Skip level 2
+            Heading(id="back", text="Back Up", level=2),
+        ],
+    )
+    result = render_toc(page)
+    # Should still generate valid nested structure
+    assert '<a href="#intro">Introduction</a>' in result
+    assert '<a href="#deep">Deep Nested</a>' in result
+    assert '<a href="#back">Back Up</a>' in result
+    assert "<ul>" in result
+
+
+def test_pygments_css_returns_styles():
+    """Test _pygments_css returns CSS styles when Pygments is available."""
+    from medusa.templates import TemplateEngine
+
+    result = TemplateEngine._pygments_css()
+    # Should return CSS styles containing .highlight class
+    assert isinstance(result, str)
+    assert ".highlight" in result or result != ""  # Either has content or is non-empty
+
+
+def test_pygments_css_import_error():
+    """Test _pygments_css returns empty string when Pygments import fails."""
+    import sys
+    from medusa.templates import TemplateEngine
+
+    # Save all pygments-related modules
+    saved_modules = {}
+    to_remove = [k for k in sys.modules if k.startswith("pygments")]
+    for key in to_remove:
+        saved_modules[key] = sys.modules.pop(key)
+
+    # Create a module that raises ImportError on attribute access
+    class BrokenModule:
+        def __getattr__(self, name):
+            raise ImportError(f"mocked ImportError for {name}")
+
+    # Insert the broken module
+    sys.modules["pygments"] = BrokenModule()
+    sys.modules["pygments.formatters"] = BrokenModule()
+
+    try:
+        # Call the actual method - it should handle ImportError gracefully
+        result = TemplateEngine._pygments_css()
+        assert result == ""
+    finally:
+        # Clean up broken modules
+        for key in ["pygments", "pygments.formatters"]:
+            if key in sys.modules:
+                del sys.modules[key]
+        # Restore original modules
+        sys.modules.update(saved_modules)

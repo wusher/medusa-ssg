@@ -286,3 +286,276 @@ def test_md_command_duplicate_detection(tmp_path, monkeypatch):
     result = runner.invoke(cli, ["md"])
     assert result.exit_code != 0
     assert "already exists" in result.output
+
+
+def test_md_command_no_content_folders(tmp_path, monkeypatch):
+    """Test md command fails when _get_content_folders returns empty list."""
+    from medusa.cli import _get_content_folders
+
+    runner = CliRunner()
+
+    # Set up project structure
+    site_dir = tmp_path / "site"
+    site_dir.mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    # Mock _get_content_folders to return empty list (edge case)
+    monkeypatch.setattr("medusa.cli._get_content_folders", lambda site_dir: [])
+
+    result = runner.invoke(cli, ["md"])
+    assert result.exit_code != 0
+    assert "No content folders found" in result.output
+
+
+def test_md_command_folder_selection_abort(tmp_path, monkeypatch):
+    """Test md command aborts when folder selection is cancelled."""
+    runner = CliRunner()
+
+    site_dir = tmp_path / "site"
+    site_dir.mkdir()
+    (site_dir / "posts").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    def mock_select(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return None  # User cancelled
+
+        return MockQuestion()
+
+    monkeypatch.setattr("medusa.cli.questionary.select", mock_select)
+
+    result = runner.invoke(cli, ["md"])
+    assert result.exit_code != 0
+
+
+def test_md_command_name_input_abort(tmp_path, monkeypatch):
+    """Test md command aborts when name input is cancelled."""
+    runner = CliRunner()
+
+    site_dir = tmp_path / "site"
+    site_dir.mkdir()
+    (site_dir / "posts").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    call_count = [0]
+
+    def mock_select(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return "posts"
+
+        return MockQuestion()
+
+    def mock_text(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return None  # User cancelled
+
+        return MockQuestion()
+
+    monkeypatch.setattr("medusa.cli.questionary.select", mock_select)
+    monkeypatch.setattr("medusa.cli.questionary.text", mock_text)
+
+    result = runner.invoke(cli, ["md"])
+    assert result.exit_code != 0
+
+
+def test_md_command_date_confirm_abort(tmp_path, monkeypatch):
+    """Test md command aborts when date prefix confirmation is cancelled."""
+    runner = CliRunner()
+
+    site_dir = tmp_path / "site"
+    site_dir.mkdir()
+    (site_dir / "posts").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    def mock_select(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return "posts"
+
+        return MockQuestion()
+
+    def mock_text(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return "my-post"
+
+        return MockQuestion()
+
+    def mock_confirm(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return None  # User cancelled
+
+        return MockQuestion()
+
+    monkeypatch.setattr("medusa.cli.questionary.select", mock_select)
+    monkeypatch.setattr("medusa.cli.questionary.text", mock_text)
+    monkeypatch.setattr("medusa.cli.questionary.confirm", mock_confirm)
+
+    result = runner.invoke(cli, ["md"])
+    assert result.exit_code != 0
+
+
+def test_md_command_without_date_prefix(tmp_path, monkeypatch):
+    """Test md command creates file without date prefix."""
+    runner = CliRunner()
+
+    site_dir = tmp_path / "site"
+    site_dir.mkdir()
+    (site_dir / "posts").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    responses = iter(["posts", "simple-post", False])
+
+    def mock_select(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return next(responses)
+
+        return MockQuestion()
+
+    def mock_text(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return next(responses)
+
+        return MockQuestion()
+
+    def mock_confirm(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return next(responses)
+
+        return MockQuestion()
+
+    monkeypatch.setattr("medusa.cli.questionary.select", mock_select)
+    monkeypatch.setattr("medusa.cli.questionary.text", mock_text)
+    monkeypatch.setattr("medusa.cli.questionary.confirm", mock_confirm)
+
+    result = runner.invoke(cli, ["md"], catch_exceptions=False)
+    assert result.exit_code == 0
+
+    # File should be created without date prefix
+    expected_file = site_dir / "posts" / "simple-post.md"
+    assert expected_file.exists()
+
+
+def test_md_command_root_folder(tmp_path, monkeypatch):
+    """Test md command creates file in root site folder."""
+    runner = CliRunner()
+
+    site_dir = tmp_path / "site"
+    site_dir.mkdir()
+    (site_dir / "posts").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+
+    responses = iter([". (root)", "root-page", False])
+
+    def mock_select(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return next(responses)
+
+        return MockQuestion()
+
+    def mock_text(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return next(responses)
+
+        return MockQuestion()
+
+    def mock_confirm(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return next(responses)
+
+        return MockQuestion()
+
+    monkeypatch.setattr("medusa.cli.questionary.select", mock_select)
+    monkeypatch.setattr("medusa.cli.questionary.text", mock_text)
+    monkeypatch.setattr("medusa.cli.questionary.confirm", mock_confirm)
+
+    result = runner.invoke(cli, ["md"], catch_exceptions=False)
+    assert result.exit_code == 0
+
+    # File should be created in site root
+    expected_file = site_dir / "root-page.md"
+    assert expected_file.exists()
+
+
+def test_md_command_exact_file_exists(tmp_path, monkeypatch):
+    """Test md command fails when exact file already exists."""
+    runner = CliRunner()
+
+    site_dir = tmp_path / "site"
+    site_dir.mkdir()
+    posts_dir = site_dir / "posts"
+    posts_dir.mkdir()
+    # Create file with exact name we'll try to create
+    (posts_dir / "exact-post.md").write_text("# Existing", encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+
+    responses = iter(["posts", "exact-post", False])
+
+    def mock_select(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return next(responses)
+
+        return MockQuestion()
+
+    def mock_text(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return next(responses)
+
+        return MockQuestion()
+
+    def mock_confirm(*args, **kwargs):
+        class MockQuestion:
+            def ask(self):
+                return next(responses)
+
+        return MockQuestion()
+
+    monkeypatch.setattr("medusa.cli.questionary.select", mock_select)
+    monkeypatch.setattr("medusa.cli.questionary.text", mock_text)
+    monkeypatch.setattr("medusa.cli.questionary.confirm", mock_confirm)
+
+    result = runner.invoke(cli, ["md"])
+    assert result.exit_code != 0
+    assert "already exists" in result.output
+
+
+def test_get_existing_slugs_empty_folder(tmp_path):
+    """Test _get_existing_slugs with folder containing no .md files."""
+    from medusa.cli import _get_existing_slugs
+
+    folder = tmp_path / "empty"
+    folder.mkdir()
+    # Add non-.md files
+    (folder / "readme.txt").write_text("hi", encoding="utf-8")
+    (folder / "config.yaml").write_text("key: val", encoding="utf-8")
+
+    slugs = _get_existing_slugs(folder)
+    assert slugs == set()
+
+
+def test_get_existing_slugs_nonexistent_folder(tmp_path):
+    """Test _get_existing_slugs with non-existent folder."""
+    from medusa.cli import _get_existing_slugs
+
+    folder = tmp_path / "nonexistent"
+    slugs = _get_existing_slugs(folder)
+    assert slugs == set()

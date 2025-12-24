@@ -65,8 +65,10 @@ def _render_toc_from_headings(headings: list[Heading]) -> Markup:
         if level_stack and level_stack[-1] == level:
             # Same level: close previous li
             html_parts.append("</li>")
-        elif not level_stack or level > level_stack[-1]:
+        elif not level_stack or level > level_stack[-1]:  # pragma: no branch
             # Deeper level: open a new ul
+            # Note: The "else" case is unreachable due to the while loop above
+            # which ensures level_stack[-1] <= level when stack is non-empty
             html_parts.append("<ul>")
             level_stack.append(level)
 

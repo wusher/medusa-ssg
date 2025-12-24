@@ -297,3 +297,31 @@ def test_build_helpers_handle_missing(monkeypatch, tmp_path):
 
     with pytest.raises(FileNotFoundError):
         build_site(project)
+
+
+def test_build_site_without_clean_output(tmp_path):
+    """Test build_site with clean_output=False creates output dir if missing."""
+    project = create_project(tmp_path)
+    output_override = tmp_path / "custom_output"
+
+    # First build with clean_output=False - should create the directory
+    result = build_site(
+        project,
+        include_drafts=False,
+        clean_output=False,
+        output_dir_override=output_override,
+    )
+    assert result.output_dir == output_override
+    assert (output_override / "index.html").exists()
+
+    # Build again with clean_output=False - should preserve existing files
+    marker = output_override / "marker.txt"
+    marker.write_text("preserved", encoding="utf-8")
+    result = build_site(
+        project,
+        include_drafts=False,
+        clean_output=False,
+        output_dir_override=output_override,
+    )
+    # File should still exist since we didn't clean
+    assert marker.exists()

@@ -584,3 +584,266 @@ More content.
     # Hashtags should be stripped
     assert "#python" not in page.excerpt
     assert "This post is about" in page.excerpt
+
+
+def test_frontmatter_non_dict_yaml(tmp_path):
+    """Test that frontmatter with non-dict YAML returns empty dict."""
+    from medusa.content import _extract_frontmatter
+
+    # YAML that parses to a list
+    text = """---
+- item1
+- item2
+---
+
+# Content
+"""
+    frontmatter, body = _extract_frontmatter(text)
+    assert frontmatter == {}
+    assert "# Content" in body
+
+
+def test_frontmatter_invalid_yaml(tmp_path):
+    """Test that invalid YAML frontmatter returns empty dict."""
+    from medusa.content import _extract_frontmatter
+
+    # Invalid YAML syntax
+    text = """---
+key: value
+  invalid: indentation
+---
+
+# Content
+"""
+    frontmatter, body = _extract_frontmatter(text)
+    assert frontmatter == {}
+    assert "# Content" in body
+
+
+def test_code_description_empty_file(tmp_path):
+    """Test description extraction from empty code file."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Empty file
+    (site / "code" / "empty.py").write_text("", encoding="utf-8")
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "empty" in p.url)
+    assert page.description == ""
+
+
+def test_code_description_multiline_docstring(tmp_path):
+    """Test description extraction from multi-line docstrings."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Multi-line docstring - second line has content
+    (site / "code" / "multiline.py").write_text(
+        '''"""
+This is a multiline docstring description.
+"""
+x = 1
+''',
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "multiline" in p.url)
+    assert page.description == "This is a multiline docstring description."
+
+
+def test_code_description_docstring_with_empty_lines(tmp_path):
+    """Test description extraction from docstring with empty lines before content."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Docstring with delimiter on same line as content start
+    (site / "code" / "edge.py").write_text(
+        '''"""
+"""
+x = 1
+''',
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "edge" in p.url)
+    # Empty docstring returns empty description
+    assert page.description == ""
+
+
+def test_code_description_shebang_ignored(tmp_path):
+    """Test that shebang lines are not used as description."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Shebang followed by no other comment
+    (site / "code" / "shebang.py").write_text(
+        """#!/usr/bin/env python
+x = 1
+""",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "shebang" in p.url)
+    # Shebang should not be used as description
+    assert page.description == ""
+
+
+def test_code_description_triple_single_quotes(tmp_path):
+    """Test description extraction from single-quote docstrings."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Single-line docstring with single quotes
+    (site / "code" / "singlequotes.py").write_text(
+        """'''Single line docstring.'''
+x = 1
+""",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "singlequotes" in p.url)
+    assert page.description == "Single line docstring."
+
+
+def test_code_block_with_invalid_language(tmp_path):
+    """Test code block rendering falls back when lexer not found."""
+    from medusa.content import _HighlightRenderer
+
+    renderer = _HighlightRenderer("")
+    # Use a made-up language that doesn't exist
+    result = renderer.block_code("code here", info="nonexistent_language_xyz123")
+    # Should fall back to plain code block
+    assert "<pre><code" in result
+    assert "code here" in result
+
+
+def test_code_description_multiline_with_delimiter_break(tmp_path):
+    """Test multi-line docstring where delimiter is found on subsequent line."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Multi-line docstring with empty content line before delimiter
+    (site / "code" / "delimbreak.py").write_text(
+        '''"""
+Content line here.
+"""
+x = 1
+''',
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "delimbreak" in p.url)
+    assert page.description == "Content line here."
+
+
+def test_code_description_multiline_only_delimiter(tmp_path):
+    """Test multi-line docstring with only delimiter lines (empty docstring)."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Docstring that immediately closes on next line
+    (site / "code" / "onlydelim.py").write_text(
+        '''"""
+"""
+x = 1
+''',
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "onlydelim" in p.url)
+    # Empty docstring, so no description
+    assert page.description == ""
+
+
+def test_code_description_multiline_empty_lines_then_content(tmp_path):
+    """Test multi-line docstring with empty lines before content."""
+    from medusa.content import ContentProcessor
+
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # Docstring with empty lines before content (content never reached due to break)
+    (site / "code" / "emptylines.py").write_text(
+        '"""\n\n"""\nx = 1\n',
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "emptylines" in p.url)
+    # Empty line is skipped, then delimiter is found
+    assert page.description == ""
+
+
+def test_code_block_without_language_info():
+    """Test code block rendering without language specification."""
+    from medusa.content import _HighlightRenderer
+
+    renderer = _HighlightRenderer("")
+    # No language info - should use plain fallback
+    result = renderer.block_code("plain code", info=None)
+    assert "<pre><code>" in result
+    assert "plain code" in result
+
+    # Empty string language
+    result = renderer.block_code("plain code", info="")
+    assert "<pre><code>" in result
+    assert "plain code" in result
+
+
+def test_code_description_single_line_docstring_only(tmp_path):
+    """Test file that is just a docstring opener (edge case for empty lines[1:])."""
+    from medusa.content import ContentProcessor
+
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content }}", encoding="utf-8"
+    )
+    (site / "code").mkdir()
+
+    # File with only a docstring opener on one line
+    (site / "code" / "singleline.py").write_text('"""', encoding="utf-8")
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "singleline" in p.url)
+    # Single line with just """, lines[1:] is empty
+    assert page.description == ""

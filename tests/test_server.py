@@ -522,3 +522,41 @@ def test_directory_without_index_returns_404(tmp_path):
     result = _ReloadHandler.send_head(handler)
     assert called["error"] == 404
     assert result is None
+
+
+def test_prepare_staging_dir_removes_existing(tmp_path):
+    """Test that _prepare_staging_dir removes existing staging directory."""
+    server = DevServer(tmp_path)
+
+    # Pre-create staging directory with content
+    staging = server._staging_dir
+    staging.mkdir(parents=True)
+    (staging / "old_file.html").write_text("old content", encoding="utf-8")
+    assert staging.exists()
+    assert (staging / "old_file.html").exists()
+
+    # Call _prepare_staging_dir
+    result = server._prepare_staging_dir()
+
+    # Staging should be recreated (empty)
+    assert result == staging
+    assert staging.exists()
+    assert not (staging / "old_file.html").exists()
+
+
+def test_change_handler_with_none_staging_dir(tmp_path):
+    """Test _ChangeHandler handles case where _staging_dir is None."""
+    server = DevServer(tmp_path)
+    server._staging_dir = None  # Set to None to hit the branch
+
+    called = {}
+
+    def fake_rebuild(include_drafts):
+        called["hit"] = True
+
+    server.rebuild = fake_rebuild
+    handler = _ChangeHandler(server, include_drafts=False)
+
+    # Should still work and call rebuild
+    handler.on_any_event(DummyEvent(str(tmp_path / "site" / "index.md")))
+    assert called.get("hit") is True
