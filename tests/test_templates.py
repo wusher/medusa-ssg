@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from medusa.content import Page
+from medusa.content import Heading, Page
 from medusa.collections import PageCollection, TagCollection
-from medusa.templates import TemplateEngine
+from medusa.templates import TemplateEngine, render_toc
 
 
 def test_template_engine_renders_with_layout(tmp_path):
@@ -201,3 +201,144 @@ def test_asset_path_helpers_with_extension_already_present(tmp_path):
     assert engine._font_path("inter.woff2") == "/assets/fonts/inter.woff2"
     assert engine._font_path("roboto.ttf") == "/assets/fonts/roboto.ttf"
     assert engine._font_path("custom.eot") == "/assets/fonts/custom.eot"
+
+
+def _make_page_with_toc(tmp_path, toc: list[Heading]) -> Page:
+    """Helper to create a Page with a specific TOC."""
+    site = tmp_path / "site"
+    site.mkdir(exist_ok=True)
+    return Page(
+        title="Test",
+        body="body",
+        content="<p>content</p>",
+        description="desc",
+        url="/test/",
+        slug="test",
+        date=datetime.now(timezone.utc),
+        tags=[],
+        draft=False,
+        layout="default",
+        group="",
+        path=site / "test.md",
+        folder="",
+        filename="test.md",
+        source_type="markdown",
+        toc=toc,
+    )
+
+
+def test_render_toc_empty_for_no_headings(tmp_path):
+    """Test render_toc returns empty string for pages without headings."""
+    page = _make_page_with_toc(tmp_path, [])
+    result = render_toc(page)
+    assert result == ""
+
+
+def test_render_toc_single_heading(tmp_path):
+    """Test render_toc with a single heading."""
+    page = _make_page_with_toc(tmp_path, [
+        Heading(id="intro", text="Introduction", level=1),
+    ])
+    result = render_toc(page)
+    assert result == '<ul><li><a href="#intro">Introduction</a></li></ul>'
+
+
+def test_render_toc_flat_headings(tmp_path):
+    """Test render_toc with multiple same-level headings."""
+    page = _make_page_with_toc(tmp_path, [
+        Heading(id="one", text="One", level=2),
+        Heading(id="two", text="Two", level=2),
+        Heading(id="three", text="Three", level=2),
+    ])
+    result = render_toc(page)
+    expected = (
+        '<ul>'
+        '<li><a href="#one">One</a></li>'
+        '<li><a href="#two">Two</a></li>'
+        '<li><a href="#three">Three</a></li>'
+        '</ul>'
+    )
+    assert result == expected
+
+
+def test_render_toc_nested_headings(tmp_path):
+    """Test render_toc with nested heading levels."""
+    page = _make_page_with_toc(tmp_path, [
+        Heading(id="intro", text="Introduction", level=1),
+        Heading(id="getting-started", text="Getting Started", level=2),
+        Heading(id="prereq", text="Prerequisites", level=3),
+        Heading(id="install", text="Installation", level=3),
+        Heading(id="advanced", text="Advanced", level=2),
+    ])
+    result = render_toc(page)
+    expected = (
+        '<ul>'
+        '<li><a href="#intro">Introduction</a>'
+        '<ul>'
+        '<li><a href="#getting-started">Getting Started</a>'
+        '<ul>'
+        '<li><a href="#prereq">Prerequisites</a></li>'
+        '<li><a href="#install">Installation</a></li>'
+        '</ul>'
+        '</li>'
+        '<li><a href="#advanced">Advanced</a></li>'
+        '</ul>'
+        '</li>'
+        '</ul>'
+    )
+    assert result == expected
+
+
+def test_render_toc_escapes_html(tmp_path):
+    """Test that render_toc escapes HTML in heading text and IDs."""
+    page = _make_page_with_toc(tmp_path, [
+        Heading(id="test-id", text="<script>alert('xss')</script>", level=1),
+    ])
+    result = render_toc(page)
+    assert "<script>" not in result
+    assert "&lt;script&gt;" in result
+
+
+def test_render_toc_available_in_template(tmp_path):
+    """Test that render_toc is available as a template global."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ render_toc(current_page) }}",
+        encoding="utf-8",
+    )
+    engine = TemplateEngine(site, {})
+
+    page = _make_page_with_toc(tmp_path, [
+        Heading(id="hello", text="Hello World", level=1),
+    ])
+    engine.update_collections(PageCollection([page]), {})
+    rendered = engine.render_page(page)
+    assert '<a href="#hello">Hello World</a>' in rendered
+
+
+def test_page_toc_in_template(tmp_path):
+    """Test that page.toc is accessible in templates."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text(
+        """{% if current_page.toc %}
+<nav>
+{% for heading in current_page.toc %}
+<a href="#{{ heading.id }}">{{ heading.text }} (h{{ heading.level }})</a>
+{% endfor %}
+</nav>
+{% endif %}""",
+        encoding="utf-8",
+    )
+    engine = TemplateEngine(site, {})
+
+    page = _make_page_with_toc(tmp_path, [
+        Heading(id="intro", text="Introduction", level=1),
+        Heading(id="details", text="Details", level=2),
+    ])
+    engine.update_collections(PageCollection([page]), {})
+    rendered = engine.render_page(page)
+
+    assert '<a href="#intro">Introduction (h1)</a>' in rendered
+    assert '<a href="#details">Details (h2)</a>' in rendered

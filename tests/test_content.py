@@ -1,7 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from medusa.content import ContentProcessor, _rewrite_image_path
+from medusa.content import ContentProcessor, Heading, _generate_heading_id, _rewrite_image_path
 
 
 def create_site(tmp_path: Path) -> Path:
@@ -271,3 +271,148 @@ def test_frontmatter_empty_or_missing(tmp_path):
     no_fm = next(p for p in pages if "no-fm" in p.url)
     assert no_fm.title == "Regular Markdown"
     assert no_fm.frontmatter == {}
+
+
+def test_generate_heading_id():
+    """Test heading ID generation from text."""
+    assert _generate_heading_id("Hello World") == "hello-world"
+    assert _generate_heading_id("  Spaces  Around  ") == "spaces-around"
+    assert _generate_heading_id("Special!@#$%Chars") == "specialchars"
+    assert _generate_heading_id("Multiple---Dashes") == "multiple-dashes"
+    assert _generate_heading_id("123 Numbers") == "123-numbers"
+
+
+def test_toc_extraction_from_markdown(tmp_path):
+    """Test that TOC is extracted from markdown headings."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+
+    (site / "article.md").write_text(
+        """# Introduction
+
+Some intro text.
+
+## Getting Started
+
+Getting started guide.
+
+### Prerequisites
+
+Things you need.
+
+## Advanced Topics
+
+Advanced content.
+
+### Configuration
+
+Config details.
+
+### Troubleshooting
+
+Fixing issues.
+""",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "article" in p.url)
+
+    # Should have 6 headings
+    assert len(page.toc) == 6
+
+    # Check heading properties
+    assert page.toc[0].text == "Introduction"
+    assert page.toc[0].level == 1
+    assert page.toc[0].id == "introduction"
+
+    assert page.toc[1].text == "Getting Started"
+    assert page.toc[1].level == 2
+    assert page.toc[1].id == "getting-started"
+
+    assert page.toc[2].text == "Prerequisites"
+    assert page.toc[2].level == 3
+    assert page.toc[2].id == "prerequisites"
+
+    # Verify headings have IDs in the rendered content
+    assert 'id="introduction"' in page.content
+    assert 'id="getting-started"' in page.content
+    assert 'id="prerequisites"' in page.content
+
+
+def test_toc_handles_duplicate_headings(tmp_path):
+    """Test that duplicate headings get unique IDs."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+
+    (site / "duplicates.md").write_text(
+        """# Overview
+
+## Features
+
+Some features.
+
+## Features
+
+More features.
+
+## Features
+
+Even more features.
+""",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "duplicates" in p.url)
+
+    # Should have 4 headings
+    assert len(page.toc) == 4
+
+    # Check that duplicate headings get unique IDs
+    assert page.toc[0].id == "overview"
+    assert page.toc[1].id == "features"
+    assert page.toc[2].id == "features-1"
+    assert page.toc[3].id == "features-2"
+
+    # Verify unique IDs in content
+    assert 'id="features"' in page.content
+    assert 'id="features-1"' in page.content
+    assert 'id="features-2"' in page.content
+
+
+def test_toc_empty_for_no_headings(tmp_path):
+    """Test that pages without headings have empty TOC."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+
+    (site / "no-headings.md").write_text(
+        "Just some paragraph text.\n\nAnother paragraph.",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "no-headings" in p.url)
+
+    assert page.toc == []
+
+
+def test_toc_empty_for_jinja_templates(tmp_path):
+    """Test that jinja templates have empty TOC (no markdown parsing)."""
+    site = tmp_path / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (site / "_layouts" / "default.html.jinja").write_text("{{ page_content }}", encoding="utf-8")
+
+    (site / "template.html.jinja").write_text(
+        "<h1>Heading One</h1><h2>Heading Two</h2>",
+        encoding="utf-8",
+    )
+
+    pages = ContentProcessor(site).load()
+    page = next(p for p in pages if "template" in p.url)
+
+    # Jinja templates are not parsed for markdown, so no TOC
+    assert page.toc == []

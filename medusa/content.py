@@ -61,6 +61,37 @@ def _extract_frontmatter(text: str) -> tuple[dict[str, Any], str]:
 
 
 @dataclass
+class Heading:
+    """Represents a heading extracted from markdown content for TOC generation.
+
+    Attributes:
+        id: Anchor ID for the heading (URL-friendly slug).
+        text: The text content of the heading.
+        level: Heading level (1-6).
+    """
+
+    id: str
+    text: str
+    level: int
+
+
+def _generate_heading_id(text: str) -> str:
+    """Generate a URL-friendly ID from heading text.
+
+    Args:
+        text: The heading text.
+
+    Returns:
+        URL-friendly slug suitable for anchor links.
+    """
+    # Convert to lowercase, replace spaces with hyphens, remove special chars
+    slug = text.lower().strip()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    slug = re.sub(r"[-\s]+", "-", slug)
+    return slug.strip("-")
+
+
+@dataclass
 class Page:
     """Represents a site page with all its metadata and content.
 
@@ -98,6 +129,7 @@ class Page:
     filename: str
     source_type: str  # "markdown" | "jinja" | "code"
     frontmatter: dict[str, Any] = field(default_factory=dict)
+    toc: List[Heading] = field(default_factory=list)
 
 
 def _rewrite_image_path(src: str, folder: str) -> str:
@@ -122,6 +154,7 @@ class _HighlightRenderer(mistune.HTMLRenderer):
 
     Attributes:
         folder: Folder containing the page being rendered.
+        headings: List of Heading objects extracted during rendering.
     """
 
     def __init__(self, folder: str):
@@ -132,6 +165,34 @@ class _HighlightRenderer(mistune.HTMLRenderer):
         """
         super().__init__(escape=False)
         self.folder = folder
+        self.headings: List[Heading] = []
+        self._heading_id_counts: dict[str, int] = {}
+
+    def heading(self, text: str, level: int, **attrs) -> str:
+        """Render a heading with auto-generated ID and track for TOC.
+
+        Args:
+            text: Heading text content.
+            level: Heading level (1-6).
+            **attrs: Additional attributes.
+
+        Returns:
+            HTML heading tag with id attribute.
+        """
+        base_id = _generate_heading_id(text)
+
+        # Handle duplicate IDs by appending a counter
+        if base_id in self._heading_id_counts:
+            self._heading_id_counts[base_id] += 1
+            heading_id = f"{base_id}-{self._heading_id_counts[base_id]}"
+        else:
+            self._heading_id_counts[base_id] = 0
+            heading_id = base_id
+
+        # Track this heading for TOC
+        self.headings.append(Heading(id=heading_id, text=text, level=level))
+
+        return f"<h{level} id=\"{heading_id}\">{text}</h{level}>\n"
 
     def image(self, text: str, url: str | None = None, title: str | None = None):
         """Render an image tag with rewritten source.
@@ -256,11 +317,13 @@ class ContentProcessor:
         slug = slugify(path.stem)
         url = self._derive_url(rel, slug)
 
+        toc: List[Heading] = []
+
         if is_code_file(path):
             # Code files: wrap in code block and render
             lang = get_code_language(path)
             markdown_source = f"```{lang}\n{body}\n```"
-            content = self._render_markdown(markdown_source, folder)
+            content, toc = self._render_markdown(markdown_source, folder)
             title = titleize(filename)
             tags: List[str] = []
             description = self._extract_code_description(body)
@@ -268,7 +331,7 @@ class ContentProcessor:
         elif is_markdown(path):
             tags = extract_tags(body)
             render_source = strip_hashtags(body)
-            content = self._render_markdown(render_source, folder)
+            content, toc = self._render_markdown(render_source, folder)
             title = self._resolve_title(body, filename)
             description = first_paragraph(strip_hashtags(body))
             source_type = "markdown"
@@ -297,15 +360,26 @@ class ContentProcessor:
             filename=filename,
             source_type=source_type,
             frontmatter=frontmatter,
+            toc=toc,
         )
 
-    def _render_markdown(self, text: str, folder: str) -> str:
+    def _render_markdown(self, text: str, folder: str) -> tuple[str, List[Heading]]:
+        """Render markdown text to HTML and extract headings.
+
+        Args:
+            text: Markdown text to render.
+            folder: Folder containing the page (for image path rewriting).
+
+        Returns:
+            Tuple of (rendered HTML, list of Heading objects for TOC).
+        """
         cleaned = strip_hashtags(text)
         renderer = _HighlightRenderer(folder)
         markdown = mistune.create_markdown(
             renderer=renderer, plugins=["strikethrough", "footnotes", "table", "url"]
         )
-        return markdown(cleaned)
+        content = markdown(cleaned)
+        return content, renderer.headings
 
     def _rewrite_inline_images(self, html: str, folder: str) -> str:
         def repl(match: re.Match) -> str:

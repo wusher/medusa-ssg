@@ -14,9 +14,84 @@ from typing import Any, Iterable
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 
-from .content import Page
+from markupsafe import Markup
+
+from .content import Heading, Page
 from .collections import PageCollection, TagCollection
 from .utils import join_root_url
+
+
+def render_toc(page: Page) -> Markup:
+    """Render a table of contents as nested HTML from page headings.
+
+    Generates properly nested `<ul><li><a href="#id">text</a></li></ul>` structure
+    based on heading levels.
+
+    Args:
+        page: Page object containing the toc (list of Heading objects).
+
+    Returns:
+        Markup-safe HTML string of the nested TOC, or empty Markup if no headings.
+    """
+    if not page.toc:
+        return Markup("")
+
+    return _render_toc_from_headings(page.toc)
+
+
+def _render_toc_from_headings(headings: list[Heading]) -> Markup:
+    """Render a list of headings as nested HTML.
+
+    Args:
+        headings: List of Heading objects.
+
+    Returns:
+        Markup-safe HTML string of the nested TOC.
+    """
+    if not headings:
+        return Markup("")
+
+    html_parts: list[str] = []
+    level_stack: list[int] = []
+
+    for heading in headings:
+        level = heading.level
+
+        # Close nested lists if going to a shallower level
+        while level_stack and level_stack[-1] > level:
+            level_stack.pop()
+            html_parts.append("</li></ul>")
+
+        if level_stack and level_stack[-1] == level:
+            # Same level: close previous li
+            html_parts.append("</li>")
+        elif not level_stack or level > level_stack[-1]:
+            # Deeper level: open a new ul
+            html_parts.append("<ul>")
+            level_stack.append(level)
+
+        # Escape text for HTML safety
+        escaped_text = (
+            heading.text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
+        escaped_id = (
+            heading.id.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
+
+        html_parts.append(f'<li><a href="#{escaped_id}">{escaped_text}</a>')
+
+    # Close all remaining open tags
+    while level_stack:
+        level_stack.pop()
+        html_parts.append("</li></ul>")
+
+    return Markup("".join(html_parts))
 
 
 class TemplateEngine:
@@ -65,6 +140,7 @@ class TemplateEngine:
         self.env.globals["css_path"] = self._css_path
         self.env.globals["img_path"] = self._img_path
         self.env.globals["font_path"] = self._font_path
+        self.env.globals["render_toc"] = render_toc
 
     @staticmethod
     def _pygments_css() -> str:
