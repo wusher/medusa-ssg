@@ -409,6 +409,7 @@ def test_pygments_css_returns_styles():
 def test_pygments_css_import_error():
     """Test _pygments_css returns empty string when Pygments import fails."""
     import sys
+
     from medusa.templates import TemplateEngine
 
     # Save all pygments-related modules

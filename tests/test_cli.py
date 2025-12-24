@@ -290,8 +290,6 @@ def test_md_command_duplicate_detection(tmp_path, monkeypatch):
 
 def test_md_command_no_content_folders(tmp_path, monkeypatch):
     """Test md command fails when _get_content_folders returns empty list."""
-    from medusa.cli import _get_content_folders
-
     runner = CliRunner()
 
     # Set up project structure
@@ -340,8 +338,6 @@ def test_md_command_name_input_abort(tmp_path, monkeypatch):
     (site_dir / "posts").mkdir()
 
     monkeypatch.chdir(tmp_path)
-
-    call_count = [0]
 
     def mock_select(*args, **kwargs):
         class MockQuestion:
