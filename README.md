@@ -1,6 +1,6 @@
 # medusa-ssg
 
-Minimal Python static site generator. Markdown + Jinja2, Tailwind CSS built-in, zero configuration, no frontmatter.
+Minimal Python static site generator. Markdown + Jinja2, Tailwind CSS built-in, zero configuration, optional frontmatter.
 
 ## Quick Start
 
@@ -15,13 +15,16 @@ Open http://localhost:4000 to see your site with live reload.
 
 ## Features
 
-- **Zero frontmatter** — title, date, tags, and description derived from filenames and content
+- **Zero frontmatter required** — title, date, tags, and description derived from filenames and content
+- **Optional YAML frontmatter** — add custom metadata when you need it
 - **Markdown + Jinja2** — write content in Markdown, layouts in Jinja2
-- **Tailwind CSS** — built-in pipeline with typography plugin
+- **Tailwind CSS** — built-in pipeline with automatic processing
 - **Live reload** — dev server with WebSocket-based hot reload
 - **Pretty URLs** — `/posts/hello/` not `/posts/hello.html`
 - **Automatic sitemap & RSS** — generated on build
 - **Custom 404 pages** — static HTML served with proper status codes
+- **Syntax highlighting** — Pygments-powered code blocks
+- **Table of contents** — auto-generated from headings
 
 ## Requirements
 
@@ -49,6 +52,8 @@ medusa build --drafts    # Include draft content
 medusa serve             # Dev server at localhost:4000
 medusa serve --port 3000 # Custom port
 medusa serve --drafts    # Include drafts in dev
+medusa md                # Interactive markdown file creator
+medusa --version         # Show version
 ```
 
 ## Project Structure
@@ -142,6 +147,24 @@ site/_experiments/test.md          # Draft folder
 
 Drafts are excluded from builds unless you use `--drafts`.
 
+### Frontmatter
+
+Add optional YAML frontmatter for custom metadata:
+
+```markdown
+---
+author: Jane Doe
+featured: true
+category: tutorials
+---
+
+# My Post Title
+
+Content goes here.
+```
+
+Access frontmatter in templates with `{{ frontmatter.author }}`.
+
 ## Templates
 
 ### Available Variables
@@ -152,20 +175,32 @@ Drafts are excluded from builds unless you use `--drafts`.
 | `pages` | Collection of all pages |
 | `tags` | Map of tag names to page collections |
 | `data` | Merged YAML from `data/` directory |
+| `frontmatter` | Current page's YAML frontmatter |
 | `url_for(path)` | Generate URLs with base path |
+| `render_toc(page)` | Generate nested `<ul>` table of contents |
+| `css_path(name)` | Path to CSS file in `assets/css/` |
+| `js_path(name)` | Path to JS file in `assets/js/` |
+| `img_path(name)` | Path to image in `assets/images/` (auto-detects extension) |
+| `font_path(name)` | Path to font in `assets/fonts/` (auto-detects extension) |
+| `pygments_css()` | CSS for syntax highlighting |
 
 ### Page Object
 
 ```python
 current_page.title        # Page title
 current_page.content      # Rendered HTML
-current_page.description  # First paragraph
+current_page.body         # Raw markdown/source text
+current_page.description  # First paragraph (for SEO)
+current_page.excerpt      # Full first paragraph
 current_page.url          # URL path (/posts/hello/)
+current_page.slug         # URL slug (hello)
 current_page.date         # Publication date
 current_page.tags         # List of tags
+current_page.toc          # List of headings for TOC
 current_page.draft        # Is draft?
 current_page.layout       # Layout name
 current_page.group        # Folder group (posts, pages, etc.)
+current_page.frontmatter  # YAML frontmatter dict
 ```
 
 ### Collections API
@@ -259,6 +294,35 @@ The content is wrapped in your layout template like Markdown pages.
 ### 404 Page
 
 Create `site/404.html` for a custom error page. It will be processed as a page at `/404/` and served with a 404 status code by the dev server.
+
+## Asset Helpers
+
+Reference assets in your templates:
+
+```jinja
+<link rel="stylesheet" href="{{ css_path('main') }}">
+<script src="{{ js_path('app') }}"></script>
+<img src="{{ img_path('logo') }}" alt="Logo">
+```
+
+All helpers respect `root_url` for CDN support. Image and font helpers auto-detect file extensions when omitted.
+
+## Syntax Highlighting
+
+Code blocks with language identifiers get Pygments highlighting:
+
+````markdown
+```python
+def hello():
+    print("Hello!")
+```
+````
+
+Include the CSS in your layout:
+
+```jinja
+<style>{{ pygments_css() }}</style>
+```
 
 ## Deployment
 
