@@ -555,3 +555,57 @@ def test_get_existing_slugs_nonexistent_folder(tmp_path):
     folder = tmp_path / "nonexistent"
     slugs = _get_existing_slugs(folder)
     assert slugs == set()
+
+
+def test_try_git_init(monkeypatch, tmp_path):
+    from medusa.cli import _try_git_init
+
+    called = {}
+    monkeypatch.setenv("MEDUSA_SKIP_GIT_INIT", "0")
+    monkeypatch.setattr("medusa.cli.shutil.which", lambda cmd: "/usr/bin/git")
+
+    def fake_run(cmd, cwd=None, check=None, capture_output=None):
+        called["cmd"] = cmd
+        called["cwd"] = cwd
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr("medusa.cli.subprocess.run", fake_run)
+    _try_git_init(tmp_path)
+    assert called["cmd"][0].endswith("git")
+    assert called["cmd"][1] == "init"
+    assert called["cwd"] == tmp_path
+
+
+def test_try_git_init_missing(monkeypatch, tmp_path):
+    from medusa.cli import _try_git_init
+
+    monkeypatch.setattr("medusa.cli.shutil.which", lambda cmd: None)
+    _try_git_init(tmp_path)  # should no-op without error
+
+
+def test_try_git_init_failure(monkeypatch, tmp_path):
+    from medusa.cli import _try_git_init
+
+    monkeypatch.setattr("medusa.cli.shutil.which", lambda cmd: "/usr/bin/git")
+
+    def fake_run(cmd, cwd=None, check=None, capture_output=None):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("medusa.cli.subprocess.run", fake_run)
+    _try_git_init(tmp_path)  # should swallow exception
+
+
+def test_try_git_init_skipped(monkeypatch, tmp_path):
+    from medusa.cli import _try_git_init
+
+    called = {}
+    monkeypatch.setenv("MEDUSA_SKIP_GIT_INIT", "1")
+    monkeypatch.setattr("medusa.cli.shutil.which", lambda cmd: "/usr/bin/git")
+
+    def fake_run(cmd, cwd=None, check=None, capture_output=None):
+        called["ran"] = True
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr("medusa.cli.subprocess.run", fake_run)
+    _try_git_init(tmp_path)
+    assert "ran" not in called  # should not have run
