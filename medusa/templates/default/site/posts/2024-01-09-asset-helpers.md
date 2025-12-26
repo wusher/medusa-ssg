@@ -1,76 +1,135 @@
 # Asset Path Helpers
 
-Medusa provides convenient helper functions for referencing assets in your templates.
+Medusa provides helper functions for referencing assets in templates.
 
 ## CSS Files
 
-Use `css_path()` to reference stylesheets in `assets/css/`. You can omit the `.css` extension or include it:
+Use `css_path()` to reference stylesheets in `assets/css/`:
 
 ```jinja
 <link rel="stylesheet" href="{{ css_path('main') }}">
-<!-- outputs: /assets/css/main.css -->
+<!-- Output: /assets/css/main.css -->
+```
 
-<link rel="stylesheet" href="{{ css_path('main.css') }}">
-<!-- also outputs: /assets/css/main.css -->
+The `.css` extension is optional:
 
-<link rel="stylesheet" href="{{ css_path('themes/dark') }}">
-<!-- outputs: /assets/css/themes/dark.css -->
+```jinja
+{{ css_path('main') }}      {# main.css #}
+{{ css_path('main.css') }}  {# also main.css #}
+```
+
+Subdirectories work too:
+
+```jinja
+{{ css_path('themes/dark') }}
+<!-- Output: /assets/css/themes/dark.css -->
 ```
 
 ## JavaScript Files
 
-Use `js_path()` to reference scripts in `assets/js/`. Extension is optional:
+Use `js_path()` to reference scripts in `assets/js/`:
 
 ```jinja
-<script src="{{ js_path('main') }}"></script>
-<!-- outputs: /assets/js/main.js -->
+<script src="{{ js_path('app') }}"></script>
+<!-- Output: /assets/js/app.js -->
+```
 
-<script src="{{ js_path('main.js') }}"></script>
-<!-- also outputs: /assets/js/main.js -->
+Extension is optional:
 
-<script src="{{ js_path('vendor/alpine') }}"></script>
-<!-- outputs: /assets/js/vendor/alpine.js -->
+```jinja
+{{ js_path('app') }}     {# app.js #}
+{{ js_path('app.js') }}  {# also app.js #}
 ```
 
 ## Images
 
-Use `img_path()` to reference images in `assets/images/`. You can pass the full filename with extension, or omit it and the helper will auto-detect by searching for `.png`, `.jpg`, `.jpeg`, then `.gif`:
+Use `img_path()` to reference images in `assets/images/`:
 
 ```jinja
 <img src="{{ img_path('logo.png') }}" alt="Logo">
-<!-- outputs: /assets/images/logo.png -->
-
-<img src="{{ img_path('logo') }}" alt="Logo">
-<!-- auto-detects: finds logo.png, logo.jpg, logo.jpeg, or logo.gif -->
-
-<img src="{{ img_path('photos/hero') }}" alt="Hero">
-<!-- finds photos/hero.png, etc. -->
+<!-- Output: /assets/images/logo.png -->
 ```
+
+### Auto-Detection
+
+Omit the extension and Medusa finds the file:
+
+```jinja
+{{ img_path('logo') }}
+```
+
+Searches for: `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`
 
 ## Fonts
 
-Use `font_path()` to reference fonts in `assets/fonts/`. You can pass the full filename with extension, or omit it and the helper will auto-detect by searching for `.woff2`, `.woff`, `.ttf`, then `.otf`:
+Use `font_path()` to reference fonts in `assets/fonts/`:
 
 ```jinja
 @font-face {
   font-family: 'Inter';
   src: url('{{ font_path('inter.woff2') }}') format('woff2');
 }
-<!-- outputs: /assets/fonts/inter.woff2 -->
+```
 
-@font-face {
-  font-family: 'Inter';
-  src: url('{{ font_path('inter') }}') format('woff2');
-}
-<!-- auto-detects: finds inter.woff2, inter.woff, inter.ttf, or inter.otf -->
+### Auto-Detection
+
+Omit the extension:
+
+```jinja
+{{ font_path('inter') }}
+```
+
+Searches for: `.woff2`, `.woff`, `.ttf`, `.otf`
+
+## URL Helper
+
+Use `url_for()` to generate URLs that respect `root_url`:
+
+```jinja
+<a href="{{ url_for('/about/') }}">About</a>
 ```
 
 ## With root_url
 
-All helpers respect the `root_url` setting in `medusa.yaml`. If you set:
+All helpers respect the `root_url` setting in `medusa.yaml`:
 
 ```yaml
 root_url: https://cdn.example.com
 ```
 
-Then `css_path('main')` outputs `https://cdn.example.com/assets/css/main.css`.
+Then:
+
+```jinja
+{{ css_path('main') }}
+<!-- Output: https://cdn.example.com/assets/css/main.css -->
+```
+
+## Code Highlighting CSS
+
+Generate Pygments CSS for syntax highlighting:
+
+```jinja
+{# Inline styles #}
+<style>{{ pygments_css() }}</style>
+
+{# Or link to a CSS file you've created #}
+<link rel="stylesheet" href="{{ css_path('pygments') }}">
+```
+
+## Complete Example
+
+A typical layout head section:
+
+```jinja
+<head>
+  <meta charset="UTF-8">
+  <title>{{ current_page.title }} | {{ data.title }}</title>
+
+  <link rel="stylesheet" href="{{ css_path('main') }}">
+  <style>{{ pygments_css() }}</style>
+
+  <link rel="icon" href="{{ img_path('favicon') }}">
+
+  <script src="{{ js_path('app') }}" defer></script>
+</head>
+```
