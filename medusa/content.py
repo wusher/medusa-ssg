@@ -166,7 +166,8 @@ def _rewrite_image_path(src: str, folder: str) -> str:
     Returns:
         Rewritten image source path.
     """
-    if src.startswith(("http://", "https://", "//", "/")):
+    # Skip absolute URLs, root-relative paths, and Jinja template expressions
+    if src.startswith(("http://", "https://", "//", "/")) or "{{" in src:
         return src
     prefix = Path(folder) if folder else Path()
     normalized = (prefix / src).as_posix()

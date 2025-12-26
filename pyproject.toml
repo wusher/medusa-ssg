@@ -1,6 +1,6 @@
 [project]
 name = "medusa-ssg"
-version = "0.1.7"
+version = "0.1.8"
 description = "Minimal Python static site generator. Markdown + Jinja2, Tailwind CSS built-in, zero configuration, no frontmatter."
 readme = "README.md"
 requires-python = ">=3.10"

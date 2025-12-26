@@ -255,6 +255,48 @@ def test_build_root_url_override(tmp_path):
     assert "https://override.com/about/" in html
 
 
+def test_img_path_in_jinja_template_with_root_url(tmp_path):
+    """Verify img_path() in Jinja templates doesn't get double-prefixed.
+
+    This tests the bug where <img src="{{ img_path('x') }}"> was being
+    rewritten by _rewrite_inline_images before template rendering,
+    causing the URL to be doubled.
+    """
+    project = tmp_path
+    site = project / "site"
+    (site / "_layouts").mkdir(parents=True)
+    (project / "assets" / "images").mkdir(parents=True)
+
+    # Create medusa.yaml
+    (project / "medusa.yaml").write_text(
+        "output_dir: output\nroot_url: http://localhost:1776\n",
+        encoding="utf-8",
+    )
+
+    # Create a simple layout
+    (site / "_layouts" / "default.html.jinja").write_text(
+        "{{ page_content | safe }}",
+        encoding="utf-8",
+    )
+
+    # Create a Jinja page that uses img_path
+    (site / "test.html.jinja").write_text(
+        '<img src="{{ img_path(\'icon\') }}" alt="Icon">',
+        encoding="utf-8",
+    )
+
+    # Create the image asset
+    (project / "assets" / "images" / "icon.svg").write_text("svg", encoding="utf-8")
+
+    result = build_site(project, root_url="http://localhost:1776")
+    html = (result.output_dir / "test-html" / "index.html").read_text(encoding="utf-8")
+
+    # The URL should appear exactly once, not doubled
+    assert 'src="http://localhost:1776/assets/images/icon.svg"' in html
+    # Make sure the URL is NOT doubled
+    assert "http://localhost:1776/assets/images/http://localhost" not in html
+
+
 def test_build_without_root_url(tmp_path):
     project = create_project(tmp_path)
     # wipe root_url and site url to force relative output

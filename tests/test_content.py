@@ -96,6 +96,29 @@ def test_rewrite_inline_images(tmp_path):
     assert "/assets/images/gallery/photo.png" in rewritten
 
 
+def test_rewrite_image_path_skips_jinja_expressions():
+    """Verify that Jinja template expressions are not rewritten."""
+    # Jinja expressions should be left unchanged
+    assert (
+        _rewrite_image_path('{{ img_path("github") }}', "")
+        == '{{ img_path("github") }}'
+    )
+    assert (
+        _rewrite_image_path("{{ url_for('/img.png') }}", "posts")
+        == "{{ url_for('/img.png') }}"
+    )
+    # Regular paths should still be rewritten
+    assert (
+        _rewrite_image_path("photo.png", "gallery")
+        == "/assets/images/gallery/photo.png"
+    )
+    # Absolute URLs should still be skipped
+    assert (
+        _rewrite_image_path("https://example.com/img.png", "")
+        == "https://example.com/img.png"
+    )
+
+
 def test_layout_resolution_specificity(tmp_path):
     site = tmp_path / "site"
     (site / "_layouts").mkdir(parents=True)
