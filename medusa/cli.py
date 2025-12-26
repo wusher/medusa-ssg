@@ -252,6 +252,9 @@ def _scaffold(root: Path) -> None:
             "build:css": "tailwindcss -i assets/css/main.css -o output/assets/css/main.css --minify",
         },
         "devDependencies": {
+            "@tailwindcss/aspect-ratio": "^0.4.2",
+            "@tailwindcss/container-queries": "^0.1.1",
+            "@tailwindcss/forms": "^0.5.9",
             "@tailwindcss/typography": "^0.5.15",
             "tailwindcss": "^3.4.13",
             "terser": "^5.36.0",
@@ -262,6 +265,26 @@ def _scaffold(root: Path) -> None:
     )
 
     _try_npm_install(root)
+    _try_git_init(root)
+
+
+def _try_git_init(root: Path) -> None:
+    """Initialize a git repository if git is available."""
+    if os.environ.get("MEDUSA_SKIP_GIT_INIT") == "1":
+        return
+    git_bin = shutil.which("git")
+    if not git_bin:
+        return
+    try:
+        subprocess.run(
+            [git_bin, "init"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+    except Exception:
+        # Non-fatal: user can run git init manually
+        pass
 
 
 def _try_npm_install(root: Path) -> None:
