@@ -33,35 +33,6 @@ _URL_SKIP_PREFIXES = (
     "javascript:",
 )
 
-# Map file extensions to language names for syntax highlighting
-CODE_EXTENSIONS: dict[str, str] = {
-    ".py": "python",
-    ".js": "javascript",
-    ".ts": "typescript",
-    ".tsx": "tsx",
-    ".jsx": "jsx",
-    ".rs": "rust",
-    ".go": "go",
-    ".java": "java",
-    ".rb": "ruby",
-    ".sh": "bash",
-    ".bash": "bash",
-    ".zsh": "zsh",
-    ".css": "css",
-    ".scss": "scss",
-    ".sass": "sass",
-    ".json": "json",
-    ".yaml": "yaml",
-    ".yml": "yaml",
-    ".toml": "toml",
-    ".xml": "xml",
-    ".sql": "sql",
-    ".c": "c",
-    ".h": "c",
-    ".cpp": "cpp",
-    ".hpp": "cpp",
-    ".cc": "cpp",
-}
 
 
 def slugify(name: str) -> str:
@@ -160,28 +131,77 @@ def is_template(path: Path) -> bool:
     return path.suffixes[-2:] == [".html", ".jinja"] or path.suffix == ".jinja"
 
 
-def is_code_file(path: Path) -> bool:
-    """Check if a path is a supported code file.
+def is_html(path: Path) -> bool:
+    """Check if a path is a plain HTML file (not a Jinja template).
 
     Args:
         path: Path to check.
 
     Returns:
-        True if the file extension is in CODE_EXTENSIONS.
+        True if the file has .html extension but not .html.jinja.
     """
-    return path.suffix.lower() in CODE_EXTENSIONS
+    return path.suffix.lower() == ".html" and not is_template(path)
 
 
-def get_code_language(path: Path) -> str:
-    """Get the language identifier for a code file.
+def extract_number_from_name(name: str) -> int | None:
+    """Extract a leading number from a filename for sorting.
+
+    Handles filenames like "01-intro.md", "2-getting-started.md", etc.
+    If the filename has a date prefix, extracts number after the date.
 
     Args:
-        path: Path to the code file.
+        name: Filename stem (without extension).
 
     Returns:
-        Language identifier string for syntax highlighting.
+        The extracted number, or None if no number found.
     """
-    return CODE_EXTENSIONS.get(path.suffix.lower(), "text")
+    # Strip layout suffix if present
+    if "[" in name and "]" in name:
+        name = name.split("[", 1)[0]
+
+    parts = name.split("-")
+
+    # Check if starts with date (YYYY-MM-DD-)
+    if len(parts) >= 4 and all(p.isdigit() for p in parts[:3]):
+        # Date prefix exists, look for number after date
+        if len(parts) > 3 and parts[3].isdigit():
+            return int(parts[3])
+        return None
+
+    # No date prefix, check for leading number
+    if parts and parts[0].isdigit():
+        return int(parts[0])
+
+    return None
+
+
+def strip_number_prefix(name: str) -> str:
+    """Strip date and number prefixes from filename for sorting comparison.
+
+    Args:
+        name: Filename stem (without extension).
+
+    Returns:
+        Filename with date and number prefixes removed.
+    """
+    # Strip layout suffix if present
+    if "[" in name and "]" in name:
+        name = name.split("[", 1)[0]
+
+    parts = name.split("-")
+
+    # Check if starts with date (YYYY-MM-DD-)
+    if len(parts) >= 4 and all(p.isdigit() for p in parts[:3]):
+        # Strip date
+        parts = parts[3:]
+        # Also strip number after date if present
+        if parts and parts[0].isdigit():
+            parts = parts[1:]
+    elif parts and parts[0].isdigit():
+        # Strip leading number
+        parts = parts[1:]
+
+    return "-".join(parts) if parts else name
 
 
 def limit_lines(text: str, width: int = 80) -> str:

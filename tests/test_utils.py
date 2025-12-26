@@ -66,20 +66,12 @@ def test_path_helpers_and_tags_index(tmp_path):
     assert utils.is_template(Path("index.html.jinja"))
     assert utils.is_markdown(Path("page.md"))
 
-    # Code file detection
-    assert utils.is_code_file(Path("script.py"))
-    assert utils.is_code_file(Path("app.js"))
-    assert utils.is_code_file(Path("main.rs"))
-    assert utils.is_code_file(Path("config.yaml"))
-    assert not utils.is_code_file(Path("readme.md"))
-    assert not utils.is_code_file(Path("page.html.jinja"))
-    assert not utils.is_code_file(Path("data.txt"))
-
-    # Language detection
-    assert utils.get_code_language(Path("app.py")) == "python"
-    assert utils.get_code_language(Path("index.js")) == "javascript"
-    assert utils.get_code_language(Path("main.go")) == "go"
-    assert utils.get_code_language(Path("unknown.xyz")) == "text"
+    # HTML file detection
+    assert utils.is_html(Path("page.html"))
+    assert utils.is_html(Path("404.html"))
+    assert not utils.is_html(Path("page.html.jinja"))  # template, not plain HTML
+    assert not utils.is_html(Path("page.md"))
+    assert not utils.is_html(Path("page.jinja"))
 
     class Page:
         def __init__(self, tags):
@@ -88,6 +80,48 @@ def test_path_helpers_and_tags_index(tmp_path):
     pages = [Page(["python", "web"]), Page(["python"])]
     tags = utils.build_tags_index(pages)
     assert set(tags["python"]) == set(pages)
+
+
+def test_extract_number_from_name():
+    # Simple number prefix
+    assert utils.extract_number_from_name("01-intro") == 1
+    assert utils.extract_number_from_name("2-getting-started") == 2
+    assert utils.extract_number_from_name("10-conclusion") == 10
+
+    # No number prefix
+    assert utils.extract_number_from_name("intro") is None
+    assert utils.extract_number_from_name("about-us") is None
+
+    # Date prefix without number after
+    assert utils.extract_number_from_name("2024-01-15-my-post") is None
+
+    # Date prefix with number after
+    assert utils.extract_number_from_name("2024-01-15-01-first-section") == 1
+    assert utils.extract_number_from_name("2024-01-15-5-middle-section") == 5
+
+    # Layout suffix handling
+    assert utils.extract_number_from_name("01-intro[hero]") == 1
+    assert utils.extract_number_from_name("2024-01-15-02-post[blog]") == 2
+
+
+def test_strip_number_prefix():
+    # Simple number prefix
+    assert utils.strip_number_prefix("01-intro") == "intro"
+    assert utils.strip_number_prefix("2-getting-started") == "getting-started"
+
+    # No prefix
+    assert utils.strip_number_prefix("intro") == "intro"
+    assert utils.strip_number_prefix("about-us") == "about-us"
+
+    # Date prefix only
+    assert utils.strip_number_prefix("2024-01-15-my-post") == "my-post"
+
+    # Date prefix with number
+    assert utils.strip_number_prefix("2024-01-15-01-first-section") == "first-section"
+
+    # Layout suffix handling
+    assert utils.strip_number_prefix("01-intro[hero]") == "intro"
+    assert utils.strip_number_prefix("2024-01-15-02-post[blog]") == "post"
 
 
 def test_join_and_absolutize_urls():
