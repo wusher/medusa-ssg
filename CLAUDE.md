@@ -55,6 +55,10 @@ Files/folders prefixed with `_` are:
 
 Searches `_layouts/` in order: `{folder}/{name}` → `{group}` → `default`, trying extensions `.html.jinja`, `.jinja`, `.html`
 
+## Configuration
+
+`medusa.yaml` options: `output_dir` (default: "output"), `root_url` (base URL for absolutizing links), `port` (dev server, default: 4000), `ws_port` (live reload WebSocket)
+
 ## Template Globals
 
 Available in all templates:
