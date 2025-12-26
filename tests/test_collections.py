@@ -5,22 +5,38 @@ from medusa.collections import PageCollection, TagCollection
 
 
 class FakePage:
-    def __init__(self, title, group="", date=None, tags=None, draft=False, filename=None):
+    def __init__(
+        self, title, group="", date=None, tags=None, draft=False, filename=None
+    ):
         self.title = title
         self.group = group
         self.date = date or datetime(2024, 1, 1)
         self.tags = tags or []
         self.draft = draft
         # Create a fake path for sorting tests
-        self.path = Path(filename if filename else f"{title.lower().replace(' ', '-')}.md")
+        self.path = Path(
+            filename if filename else f"{title.lower().replace(' ', '-')}.md"
+        )
 
 
 def test_page_collection_filters_and_latest():
     pages = PageCollection(
         [
             FakePage("A", group="posts", date=datetime(2024, 1, 2), filename="a.md"),
-            FakePage("B", group="posts", date=datetime(2024, 1, 3), draft=True, filename="b.md"),
-            FakePage("C", group="docs", date=datetime(2024, 1, 1), tags=["python"], filename="c.md"),
+            FakePage(
+                "B",
+                group="posts",
+                date=datetime(2024, 1, 3),
+                draft=True,
+                filename="b.md",
+            ),
+            FakePage(
+                "C",
+                group="docs",
+                date=datetime(2024, 1, 1),
+                tags=["python"],
+                filename="c.md",
+            ),
         ]
     )
     assert len(pages) == 3
@@ -97,9 +113,15 @@ def test_sorting_with_dated_filenames():
     """Test sorting with dated filenames like 2024-01-15-post.md."""
     pages = PageCollection(
         [
-            FakePage("Post C", date=datetime(2024, 1, 15), filename="2024-01-15-03-post-c.md"),
-            FakePage("Post A", date=datetime(2024, 1, 15), filename="2024-01-15-01-post-a.md"),
-            FakePage("Post B", date=datetime(2024, 1, 15), filename="2024-01-15-02-post-b.md"),
+            FakePage(
+                "Post C", date=datetime(2024, 1, 15), filename="2024-01-15-03-post-c.md"
+            ),
+            FakePage(
+                "Post A", date=datetime(2024, 1, 15), filename="2024-01-15-01-post-a.md"
+            ),
+            FakePage(
+                "Post B", date=datetime(2024, 1, 15), filename="2024-01-15-02-post-b.md"
+            ),
         ]
     )
     # Same date, sort by number after date prefix

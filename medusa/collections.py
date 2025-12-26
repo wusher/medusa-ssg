@@ -56,7 +56,11 @@ class PageCollection(Sequence[Page]):
                 number = extract_number_from_name(p.path.stem)
                 # Use 0 if no number (so numbered files come after non-numbered when ascending)
                 # Use float('inf') for reverse so non-numbered come last
-                num_key = number if number is not None else (0 if not reverse else float("inf"))
+                num_key = (
+                    number
+                    if number is not None
+                    else (0 if not reverse else float("inf"))
+                )
                 name_key = strip_number_prefix(p.path.stem).lower()
                 return (p.date, num_key, name_key)
 

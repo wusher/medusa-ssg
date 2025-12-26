@@ -34,7 +34,6 @@ _URL_SKIP_PREFIXES = (
 )
 
 
-
 def slugify(name: str) -> str:
     """Convert filename (without extension) to slug, dropping date prefix.
 

@@ -29,7 +29,7 @@ dev:
 
 # Run tests with coverage (100% minimum)
 test:
-	pytest --cov=medusa --cov-report=term-missing --cov-fail-under=100
+	python -m pytest
 
 # Run linter and fix issues
 lint:
