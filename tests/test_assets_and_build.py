@@ -221,7 +221,8 @@ def test_build_site_creates_output(monkeypatch, tmp_path):
     assert data["title"] == "Test"
 
 
-def test_build_copies_plain_html(tmp_path):
+def test_build_processes_html_files(tmp_path):
+    """HTML files are now processed as pages with pretty URLs."""
     project = create_project(tmp_path)
     static_html = project / "site" / "static" / "plain.html"
     static_html.parent.mkdir(parents=True, exist_ok=True)
@@ -231,10 +232,12 @@ def test_build_copies_plain_html(tmp_path):
     hidden_html.write_text("<html>secret</html>", encoding="utf-8")
 
     result = build_site(project, include_drafts=False)
-    out_file = result.output_dir / "static" / "plain.html"
+    # HTML files are now processed as pages with pretty URLs
+    out_file = result.output_dir / "static" / "plain" / "index.html"
     assert out_file.exists()
     assert "plain" in out_file.read_text(encoding="utf-8")
-    assert not (result.output_dir / "_hidden" / "secret.html").exists()
+    # Hidden files are still excluded
+    assert not (result.output_dir / "_hidden" / "secret" / "index.html").exists()
 
 
 def test_build_root_url_override(tmp_path):
@@ -259,11 +262,11 @@ def test_build_without_root_url(tmp_path):
     html = (result.output_dir / "index.html").read_text(encoding="utf-8")
     assert 'href="/assets/css/main.css"' in html
     assert 'href="/about/"' in html
-    assert (
-        (result.output_dir / "static" / "plain.html")
-        .read_text(encoding="utf-8")
-        .startswith("<html>")
+    # HTML files are now processed as pages with pretty URLs (wrapped in layout)
+    plain_content = (result.output_dir / "static" / "plain" / "index.html").read_text(
+        encoding="utf-8"
     )
+    assert "plain" in plain_content
 
 
 def test_build_helpers_handle_missing(monkeypatch, tmp_path):

@@ -100,6 +100,16 @@ ws_port: 4001
 
 ## Writing Content
 
+### Supported File Types
+
+Medusa processes these file types in the `site/` directory:
+
+- **Markdown** (`.md`) — Content files with full Markdown support
+- **HTML** (`.html`) — Plain HTML files, processed as pages with pretty URLs
+- **Jinja templates** (`.html.jinja`, `.jinja`) — Templates with Jinja2 syntax
+
+All other file types are ignored.
+
 ### Markdown Pages
 
 Create `.md` files anywhere in `site/`:
@@ -119,15 +129,6 @@ Name files with a date prefix for automatic date extraction:
 ```
 site/posts/2024-01-15-my-post.md  →  /posts/my-post/
 site/posts/2024-02-20-another.md  →  /posts/another/
-```
-
-### Custom Layouts
-
-Specify a layout with brackets in the filename:
-
-```
-site/about[minimal].md  →  Uses _layouts/minimal.html.jinja
-site/contact.md         →  Uses _layouts/default.html.jinja
 ```
 
 ### Drafts
@@ -186,6 +187,27 @@ current_page.group        # Folder group (posts, pages, etc.)
 {% endfor %}
 ```
 
+### Sorting
+
+Pages are sorted by three criteria in order:
+
+1. **Date** — Newest first (from filename or file modification time)
+2. **Number prefix** — If dates are equal, by number prefix in filename
+3. **Filename** — If dates and numbers are equal, alphabetically
+
+Examples of number prefixes:
+```
+site/docs/01-introduction.md   →  Sorted first
+site/docs/02-getting-started.md →  Sorted second
+site/docs/03-advanced.md       →  Sorted third
+```
+
+You can also combine date and number prefixes:
+```
+site/posts/2024-01-15-01-part-one.md
+site/posts/2024-01-15-02-part-two.md
+```
+
 ### Partials
 
 ```jinja
@@ -226,13 +248,17 @@ author: Jane Doe
 
 ## Static Files
 
+### HTML Pages
+
+HTML files (`.html`) in `site/` are processed as pages with pretty URLs. For example:
+- `site/about.html` → `/about/`
+- `site/404.html` → `/404/`
+
+The content is wrapped in your layout template like Markdown pages.
+
 ### 404 Page
 
-Create `site/404.html` for a custom error page. This file is copied directly to output without layout processing and served with a 404 status code by the dev server.
-
-### Other Static HTML
-
-Any `.html` file (not `.html.jinja`) in `site/` is copied as-is to output, preserving the path structure.
+Create `site/404.html` for a custom error page. It will be processed as a page at `/404/` and served with a 404 status code by the dev server.
 
 ## Deployment
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 from .content import Page
+from .utils import extract_number_from_name, strip_number_prefix
 
 
 class PageCollection(Sequence[Page]):
@@ -35,8 +36,35 @@ class PageCollection(Sequence[Page]):
         return PageCollection(p for p in self._pages if not p.draft)
 
     def sorted(self, reverse: bool = True) -> PageCollection:
+        """Sort pages by date, then by number prefix, then by filename.
+
+        Sorting order (when reverse=True, the default):
+        1. Date: newest first
+        2. Number: if dates are equal, by number prefix (e.g., 01-intro.md)
+        3. Filename: if dates and numbers are equal, alphabetically by filename
+           (excluding date and number prefixes)
+
+        Args:
+            reverse: If True (default), newest/highest first. If False, oldest/lowest first.
+
+        Returns:
+            A new PageCollection with sorted pages.
+        """
         if self._sorted_cache is None or reverse is False:
-            sorted_pages = sorted(self._pages, key=lambda p: p.date, reverse=reverse)
+
+            def sort_key(p: Page):
+                number = extract_number_from_name(p.path.stem)
+                # Use 0 if no number (so numbered files come after non-numbered when ascending)
+                # Use float('inf') for reverse so non-numbered come last
+                num_key = (
+                    number
+                    if number is not None
+                    else (0 if not reverse else float("inf"))
+                )
+                name_key = strip_number_prefix(p.path.stem).lower()
+                return (p.date, num_key, name_key)
+
+            sorted_pages = sorted(self._pages, key=sort_key, reverse=reverse)
             if reverse:
                 self._sorted_cache = PageCollection(sorted_pages)
             return PageCollection(sorted_pages)

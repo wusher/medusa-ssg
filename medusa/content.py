@@ -24,8 +24,7 @@ from .utils import (
     extract_date_from_name,
     extract_tags,
     first_paragraph,
-    get_code_language,
-    is_code_file,
+    is_html,
     is_markdown,
     is_template,
     slugify,
@@ -134,7 +133,7 @@ class Page:
         path: Path to the source file.
         folder: Folder path relative to site directory.
         filename: Name of the source file.
-        source_type: "markdown" or "jinja".
+        source_type: "markdown", "html", or "jinja".
     """
 
     title: str
@@ -152,7 +151,7 @@ class Page:
     path: Path
     folder: str
     filename: str
-    source_type: str  # "markdown" | "jinja" | "code"
+    source_type: str  # "markdown" | "html" | "jinja"
     frontmatter: dict[str, Any] = field(default_factory=dict)
     toc: list[Heading] = field(default_factory=list)
 
@@ -295,7 +294,7 @@ class ContentProcessor:
         """Iterate over all source files in the site directory.
 
         Yields:
-            Paths to content files (markdown, templates, and code files in subfolders).
+            Paths to content files (markdown, html, and jinja templates).
         """
         for path in self.site_dir.rglob("*"):
             if path.is_dir():
@@ -306,10 +305,7 @@ class ContentProcessor:
                 continue
             if rel.name.startswith("_") and not include_drafts:
                 continue
-            if is_markdown(path) or is_template(path):
-                yield path
-            # Code files only in subfolders (not root site/)
-            elif is_code_file(path) and len(parts) > 1:
+            if is_markdown(path) or is_template(path) or is_html(path):
                 yield path
 
     def _build_page(self, path: Path, draft: bool) -> Page:
@@ -327,12 +323,7 @@ class ContentProcessor:
         filename = path.name
         raw_body = path.read_text(encoding="utf-8")
 
-        # Extract frontmatter for markdown and jinja files
-        if is_code_file(path):
-            frontmatter: dict[str, Any] = {}
-            body = raw_body
-        else:
-            frontmatter, body = _extract_frontmatter(raw_body)
+        frontmatter, body = _extract_frontmatter(raw_body)
 
         date = extract_date_from_name(path.stem) or datetime.fromtimestamp(
             path.stat().st_mtime
@@ -345,16 +336,7 @@ class ContentProcessor:
         toc: list[Heading] = []
         excerpt: str = ""
 
-        if is_code_file(path):
-            # Code files: wrap in code block and render
-            lang = get_code_language(path)
-            markdown_source = f"```{lang}\n{body}\n```"
-            content, toc = self._render_markdown(markdown_source, folder)
-            title = titleize(filename)
-            tags: list[str] = []
-            description = self._extract_code_description(body)
-            source_type = "code"
-        elif is_markdown(path):
+        if is_markdown(path):
             tags = extract_tags(body)
             render_source = strip_hashtags(body)
             content, toc = self._render_markdown(render_source, folder)
@@ -362,7 +344,15 @@ class ContentProcessor:
             description = first_paragraph(strip_hashtags(body))
             excerpt = _extract_excerpt(strip_hashtags(body))
             source_type = "markdown"
+        elif is_html(path):
+            tags = extract_tags(body)
+            render_source = strip_hashtags(body)
+            content = render_source
+            title = self._resolve_title(body, filename)
+            description = first_paragraph(strip_hashtags(body))
+            source_type = "html"
         else:
+            # Jinja templates
             tags = extract_tags(body)
             render_source = strip_hashtags(body)
             content = render_source
@@ -424,47 +414,9 @@ class ContentProcessor:
                 return stripped.lstrip("# ").strip()
         return titleize(filename)
 
-    def _extract_code_description(self, code: str) -> str:
-        """Extract description from code file (first comment or empty).
-
-        Args:
-            code: Source code content.
-
-        Returns:
-            Description string, limited to 160 characters.
-        """
-        lines = code.strip().splitlines()
-        if not lines:
-            return ""
-
-        first_line = lines[0].strip()
-
-        # Python/Ruby/Shell: # comment (but not shebang)
-        if first_line.startswith("#") and not first_line.startswith("#!"):
-            return first_line.lstrip("#").strip()[:160]
-        # C-style: // comment
-        if first_line.startswith("//"):
-            return first_line.lstrip("/").strip()[:160]
-        # Docstring: """ or '''
-        if first_line.startswith(('"""', "'''")):
-            delimiter = first_line[:3]
-            # Single line docstring
-            if first_line.endswith(delimiter) and len(first_line) > 6:
-                return first_line[3:-3].strip()[:160]
-            # Multi-line: get first content line
-            for line in lines[1:]:
-                stripped = line.strip()
-                if stripped and not stripped.startswith(delimiter):
-                    return stripped[:160]
-                if delimiter in stripped:
-                    break
-        return ""
-
     def _resolve_layout(self, path: Path, folder: str) -> str:
         name = path.stem
         layout_dir = self.site_dir / "_layouts"
-        if "[" in name and "]" in name:
-            return name.split("[", 1)[1].split("]", 1)[0]
         group = self._group_from_folder(folder)
         candidates: list[str] = []
         if folder:

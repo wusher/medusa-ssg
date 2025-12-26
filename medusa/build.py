@@ -139,7 +139,6 @@ def build_site(
         _write_page(output_dir, page, rendered)
 
     AssetPipeline(project_root, output_dir).run()
-    _copy_static_html(site_dir, output_dir, resolved_root)
     _write_sitemap(output_dir, data, pages)
     _write_rss(output_dir, data, pages)
     return BuildResult(pages=pages, output_dir=output_dir, data=data)
@@ -159,26 +158,6 @@ def _write_page(output_dir: Path, page: Page, rendered: str) -> None:
     html_path = target_dir / "index.html"
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(rendered)
-
-
-def _copy_static_html(site_dir: Path, output_dir: Path, root_url: str) -> None:
-    """Copy plain HTML files directly to output without layout processing.
-
-    Args:
-        site_dir: Source site directory.
-        output_dir: Output directory.
-    """
-    for path in site_dir.rglob("*.html"):
-        rel = path.relative_to(site_dir)
-        # Skip files in internal directories
-        if any(part.startswith("_") for part in rel.parts):
-            continue
-        dest = output_dir / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        content = path.read_text(encoding="utf-8")
-        if root_url:
-            content = absolutize_html_urls(content, root_url)
-        dest.write_text(content, encoding="utf-8")
 
 
 def _write_sitemap(
