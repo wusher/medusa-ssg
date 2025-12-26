@@ -21,6 +21,30 @@ from .content import Heading, Page
 from .utils import join_root_url
 
 
+class AssetNotFoundError(Exception):
+    """Error raised when an asset file is not found.
+
+    Attributes:
+        asset_name: The name of the asset that was requested.
+        asset_type: The type of asset (e.g., "image", "font", "js", "css").
+        searched_paths: List of paths that were searched.
+    """
+
+    def __init__(
+        self,
+        asset_name: str,
+        asset_type: str,
+        searched_paths: list[Path],
+    ):
+        self.asset_name = asset_name
+        self.asset_type = asset_type
+        self.searched_paths = searched_paths
+        paths_str = ", ".join(str(p) for p in searched_paths)
+        super().__init__(
+            f"{asset_type} asset '{asset_name}' not found. Searched: {paths_str}"
+        )
+
+
 def render_toc(page: Page) -> Markup:
     """Render a table of contents as nested HTML from page headings.
 
@@ -170,9 +194,15 @@ class TemplateEngine:
 
         Returns:
             URL path like /assets/js/app.js
+
+        Raises:
+            AssetNotFoundError: If the JavaScript file doesn't exist.
         """
         if not name.endswith(".js"):
             name = f"{name}.js"
+        file_path = self.site_dir.parent / "assets" / "js" / name
+        if not file_path.exists():
+            raise AssetNotFoundError(name, "JavaScript", [file_path])
         return self._url_for(f"/assets/js/{name}")
 
     def _css_path(self, name: str) -> str:
@@ -183,58 +213,88 @@ class TemplateEngine:
 
         Returns:
             URL path like /assets/css/main.css
+
+        Raises:
+            AssetNotFoundError: If the CSS file doesn't exist.
         """
         if not name.endswith(".css"):
             name = f"{name}.css"
+        file_path = self.site_dir.parent / "assets" / "css" / name
+        if not file_path.exists():
+            raise AssetNotFoundError(name, "CSS", [file_path])
         return self._url_for(f"/assets/css/{name}")
 
     def _img_path(self, name: str) -> str:
         """Return URL path for an image file, auto-detecting extension.
 
-        Searches for the image with extensions in order: png, jpg, jpeg, gif.
-        If name already has an extension, uses it directly.
+        Searches for the image with extensions in order: png, jpg, jpeg, gif, svg, webp.
+        If name already has an extension, validates it exists.
 
         Args:
             name: Filename with or without extension (e.g., "logo" or "logo.png").
 
         Returns:
             URL path like /assets/images/logo.png
+
+        Raises:
+            AssetNotFoundError: If no matching image file is found.
         """
-        # If already has a known image extension, use it directly
-        for ext in ("png", "jpg", "jpeg", "gif", "svg", "webp"):
-            if name.endswith(f".{ext}"):
-                return self._url_for(f"/assets/images/{name}")
-        # Auto-detect extension
         assets_dir = self.site_dir.parent / "assets" / "images"
-        for ext in ("png", "jpg", "jpeg", "gif"):
-            if (assets_dir / f"{name}.{ext}").exists():
+        extensions = ("png", "jpg", "jpeg", "gif", "svg", "webp")
+
+        # If already has a known image extension, validate it exists
+        for ext in extensions:
+            if name.endswith(f".{ext}"):
+                file_path = assets_dir / name
+                if not file_path.exists():
+                    raise AssetNotFoundError(name, "image", [file_path])
+                return self._url_for(f"/assets/images/{name}")
+
+        # Auto-detect extension
+        searched_paths = []
+        for ext in extensions:
+            file_path = assets_dir / f"{name}.{ext}"
+            searched_paths.append(file_path)
+            if file_path.exists():
                 return self._url_for(f"/assets/images/{name}.{ext}")
-        # Fallback to .png if no file found
-        return self._url_for(f"/assets/images/{name}.png")
+
+        raise AssetNotFoundError(name, "image", searched_paths)
 
     def _font_path(self, name: str) -> str:
         """Return URL path for a font file, auto-detecting extension.
 
-        Searches for the font with extensions in order: woff2, woff, ttf, otf.
-        If name already has an extension, uses it directly.
+        Searches for the font with extensions in order: woff2, woff, ttf, otf, eot.
+        If name already has an extension, validates it exists.
 
         Args:
             name: Filename with or without extension (e.g., "inter" or "inter.woff2").
 
         Returns:
             URL path like /assets/fonts/inter.woff2
+
+        Raises:
+            AssetNotFoundError: If no matching font file is found.
         """
-        # If already has a known font extension, use it directly
-        for ext in ("woff2", "woff", "ttf", "otf", "eot"):
-            if name.endswith(f".{ext}"):
-                return self._url_for(f"/assets/fonts/{name}")
-        # Auto-detect extension
         assets_dir = self.site_dir.parent / "assets" / "fonts"
-        for ext in ("woff2", "woff", "ttf", "otf"):
-            if (assets_dir / f"{name}.{ext}").exists():
+        extensions = ("woff2", "woff", "ttf", "otf", "eot")
+
+        # If already has a known font extension, validate it exists
+        for ext in extensions:
+            if name.endswith(f".{ext}"):
+                file_path = assets_dir / name
+                if not file_path.exists():
+                    raise AssetNotFoundError(name, "font", [file_path])
+                return self._url_for(f"/assets/fonts/{name}")
+
+        # Auto-detect extension
+        searched_paths = []
+        for ext in extensions:
+            file_path = assets_dir / f"{name}.{ext}"
+            searched_paths.append(file_path)
+            if file_path.exists():
                 return self._url_for(f"/assets/fonts/{name}.{ext}")
-        # Fallback to .woff2 if no file found
-        return self._url_for(f"/assets/fonts/{name}.woff2")
+
+        raise AssetNotFoundError(name, "font", searched_paths)
 
     def update_collections(
         self, pages: Iterable[Page], tags: dict[str, list[Page]]

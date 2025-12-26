@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from medusa.collections import PageCollection
 from medusa.content import Heading, Page
-from medusa.templates import TemplateEngine, render_toc
+from medusa.templates import AssetNotFoundError, TemplateEngine, render_toc
 
 
 def test_template_engine_renders_with_layout(tmp_path):
@@ -126,6 +128,16 @@ def test_asset_path_helpers(tmp_path):
     (assets / "images").mkdir()
     (assets / "fonts").mkdir()
 
+    # Create JS files
+    (assets / "js" / "app.js").write_text("js")
+    (assets / "js" / "vendor").mkdir()
+    (assets / "js" / "vendor" / "jquery.js").write_text("js")
+
+    # Create CSS files
+    (assets / "css" / "main.css").write_text("css")
+    (assets / "css" / "themes").mkdir()
+    (assets / "css" / "themes" / "dark.css").write_text("css")
+
     # Create some image files
     (assets / "images" / "logo.png").write_text("png")
     (assets / "images" / "photo.jpg").write_text("jpg")
@@ -150,23 +162,86 @@ def test_asset_path_helpers(tmp_path):
     assert engine._img_path("photo") == "/assets/images/photo.jpg"
     assert engine._img_path("icon") == "/assets/images/icon.gif"
 
-    # img_path - falls back to .png for missing files
-    assert engine._img_path("missing") == "/assets/images/missing.png"
-
     # font_path - finds existing files with correct extension
     assert engine._font_path("inter") == "/assets/fonts/inter.woff2"
     assert engine._font_path("roboto") == "/assets/fonts/roboto.ttf"
 
-    # font_path - falls back to .woff2 for missing files
-    assert engine._font_path("missing") == "/assets/fonts/missing.woff2"
+
+def test_asset_path_helpers_missing_files(tmp_path):
+    """Test asset helpers raise AssetNotFoundError for missing files."""
+    site = tmp_path / "site"
+    site.mkdir()
+
+    # Create assets directory structure (empty)
+    assets = tmp_path / "assets"
+    (assets / "js").mkdir(parents=True)
+    (assets / "css").mkdir()
+    (assets / "images").mkdir()
+    (assets / "fonts").mkdir()
+
+    engine = TemplateEngine(site, {})
+
+    # js_path raises error for missing file
+    with pytest.raises(AssetNotFoundError) as exc_info:
+        engine._js_path("missing")
+    assert exc_info.value.asset_name == "missing.js"
+    assert exc_info.value.asset_type == "JavaScript"
+
+    # css_path raises error for missing file
+    with pytest.raises(AssetNotFoundError) as exc_info:
+        engine._css_path("missing")
+    assert exc_info.value.asset_name == "missing.css"
+    assert exc_info.value.asset_type == "CSS"
+
+    # img_path raises error for missing file
+    with pytest.raises(AssetNotFoundError) as exc_info:
+        engine._img_path("missing")
+    assert exc_info.value.asset_name == "missing"
+    assert exc_info.value.asset_type == "image"
+    assert len(exc_info.value.searched_paths) > 0
+
+    # font_path raises error for missing file
+    with pytest.raises(AssetNotFoundError) as exc_info:
+        engine._font_path("missing")
+    assert exc_info.value.asset_name == "missing"
+    assert exc_info.value.asset_type == "font"
+    assert len(exc_info.value.searched_paths) > 0
+
+
+def test_asset_path_helpers_with_extension_missing(tmp_path):
+    """Test asset helpers raise error when file with extension doesn't exist."""
+    site = tmp_path / "site"
+    site.mkdir()
+
+    assets = tmp_path / "assets"
+    (assets / "images").mkdir(parents=True)
+    (assets / "fonts").mkdir()
+
+    engine = TemplateEngine(site, {})
+
+    # img_path with explicit extension that doesn't exist
+    with pytest.raises(AssetNotFoundError) as exc_info:
+        engine._img_path("logo.png")
+    assert exc_info.value.asset_name == "logo.png"
+
+    # font_path with explicit extension that doesn't exist
+    with pytest.raises(AssetNotFoundError) as exc_info:
+        engine._font_path("inter.woff2")
+    assert exc_info.value.asset_name == "inter.woff2"
 
 
 def test_asset_path_helpers_with_root_url(tmp_path):
     """Test asset helpers respect root_url."""
     site = tmp_path / "site"
     site.mkdir()
+    (tmp_path / "assets" / "js").mkdir(parents=True)
+    (tmp_path / "assets" / "css").mkdir(parents=True)
     (tmp_path / "assets" / "images").mkdir(parents=True)
     (tmp_path / "assets" / "fonts").mkdir(parents=True)
+
+    # Create the asset files
+    (tmp_path / "assets" / "js" / "app.js").write_text("js")
+    (tmp_path / "assets" / "css" / "main.css").write_text("css")
     (tmp_path / "assets" / "images" / "hero.jpeg").write_text("jpeg")
     (tmp_path / "assets" / "fonts" / "custom.woff").write_text("woff")
 
@@ -185,8 +260,25 @@ def test_asset_path_helpers_with_extension_already_present(tmp_path):
     """Test asset helpers don't double-append extensions."""
     site = tmp_path / "site"
     site.mkdir()
+    (tmp_path / "assets" / "js").mkdir(parents=True)
+    (tmp_path / "assets" / "css").mkdir(parents=True)
     (tmp_path / "assets" / "images").mkdir(parents=True)
     (tmp_path / "assets" / "fonts").mkdir(parents=True)
+
+    # Create the asset files
+    (tmp_path / "assets" / "js" / "app.js").write_text("js")
+    (tmp_path / "assets" / "js" / "vendor").mkdir()
+    (tmp_path / "assets" / "js" / "vendor" / "lib.js").write_text("js")
+    (tmp_path / "assets" / "css" / "main.css").write_text("css")
+    (tmp_path / "assets" / "css" / "themes").mkdir()
+    (tmp_path / "assets" / "css" / "themes" / "dark.css").write_text("css")
+    (tmp_path / "assets" / "images" / "logo.png").write_text("png")
+    (tmp_path / "assets" / "images" / "photo.jpg").write_text("jpg")
+    (tmp_path / "assets" / "images" / "icon.svg").write_text("svg")
+    (tmp_path / "assets" / "images" / "banner.webp").write_text("webp")
+    (tmp_path / "assets" / "fonts" / "inter.woff2").write_text("woff2")
+    (tmp_path / "assets" / "fonts" / "roboto.ttf").write_text("ttf")
+    (tmp_path / "assets" / "fonts" / "custom.eot").write_text("eot")
 
     engine = TemplateEngine(site, {})
 

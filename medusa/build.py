@@ -18,11 +18,34 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from jinja2 import TemplateSyntaxError
 
 from .assets import AssetPipeline
 from .content import ContentProcessor, Page
-from .templates import TemplateEngine
+from .templates import AssetNotFoundError, TemplateEngine
 from .utils import absolutize_html_urls, build_tags_index, ensure_clean_dir
+
+
+class BuildError(Exception):
+    """Error during site build with file context.
+
+    Attributes:
+        source_path: Path to the source file that caused the error.
+        message: Human-readable error message.
+        original_error: The original exception that was caught.
+    """
+
+    def __init__(
+        self,
+        source_path: Path,
+        message: str,
+        original_error: Exception | None = None,
+    ):
+        self.source_path = source_path
+        self.message = message
+        self.original_error = original_error
+        super().__init__(f"{source_path}: {message}")
+
 
 DEFAULT_CONFIG = {
     "output_dir": "output",
@@ -133,7 +156,26 @@ def build_site(
     engine = TemplateEngine(site_dir, data, root_url=resolved_root)
     engine.update_collections(pages, tags)
     for page in pages:
-        rendered = engine.render_page(page)
+        try:
+            rendered = engine.render_page(page)
+        except TemplateSyntaxError as exc:
+            raise BuildError(
+                page.path,
+                f"Template syntax error on line {exc.lineno}: {exc.message}",
+                exc,
+            ) from exc
+        except AssetNotFoundError as exc:
+            raise BuildError(
+                page.path,
+                f"Missing {exc.asset_type} asset: '{exc.asset_name}'",
+                exc,
+            ) from exc
+        except Exception as exc:
+            raise BuildError(
+                page.path,
+                _format_error_message(exc),
+                exc,
+            ) from exc
         if resolved_root:
             rendered = absolutize_html_urls(rendered, resolved_root)
         _write_page(output_dir, page, rendered)
@@ -142,6 +184,29 @@ def build_site(
     _write_sitemap(output_dir, data, pages)
     _write_rss(output_dir, data, pages)
     return BuildResult(pages=pages, output_dir=output_dir, data=data)
+
+
+def _format_error_message(exc: Exception) -> str:
+    """Format an exception into a user-friendly error message.
+
+    Args:
+        exc: The exception to format.
+
+    Returns:
+        A human-readable error message.
+    """
+    error_type = type(exc).__name__
+    error_msg = str(exc)
+
+    # Handle common Jinja2/template errors
+    if error_type == "UndefinedError":
+        return f"Undefined variable: {error_msg}"
+    if error_type == "TypeError":
+        return f"Type error: {error_msg}"
+    if error_type == "AttributeError":
+        return f"Attribute error: {error_msg}"
+
+    return f"{error_type}: {error_msg}"
 
 
 def _write_page(output_dir: Path, page: Page, rendered: str) -> None:
