@@ -2,7 +2,7 @@ import subprocess
 
 from click.testing import CliRunner
 
-from medusa.build import BuildResult
+from medusa.build import BuildError, BuildResult
 from medusa.cli import cli
 
 
@@ -71,6 +71,39 @@ def test_cli_build_and_serve(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert called["port"] == 5050
     assert called["ws_port"] == 5051
+
+
+def test_cli_build_error_display(monkeypatch, tmp_path):
+    """Test CLI displays user-friendly error message on BuildError."""
+    runner = CliRunner()
+    project = tmp_path / "mysite"
+    runner.invoke(cli, ["new", str(project)], env={"MEDUSA_SKIP_NPM_INSTALL": "1"})
+    monkeypatch.chdir(project)
+
+    # Use absolute path within the project
+    broken_file = project / "site" / "broken.jinja"
+
+    def fake_build_site_error(
+        root,
+        include_drafts=False,
+        root_url=None,
+        clean_output=True,
+        output_dir_override=None,
+    ):
+        raise BuildError(
+            broken_file,
+            "Type error: sorted() got an unexpected keyword argument 'key'",
+            TypeError("sorted() got an unexpected keyword argument 'key'"),
+        )
+
+    monkeypatch.setattr("medusa.build.build_site", fake_build_site_error)
+
+    result = runner.invoke(cli, ["build"])
+    assert result.exit_code == 1
+    # Error output goes to stderr, which is captured in result.output
+    assert "Build failed" in result.output
+    assert "site/broken.jinja" in result.output
+    assert "sorted() got an unexpected keyword argument" in result.output
 
 
 def test_module_main_entrypoint():

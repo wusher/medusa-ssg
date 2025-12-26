@@ -5,7 +5,14 @@ from pathlib import Path
 import pytest
 
 from medusa.assets import AssetPipeline
-from medusa.build import BuildResult, build_site, load_config, load_data
+from medusa.build import (
+    BuildError,
+    BuildResult,
+    _format_error_message,
+    build_site,
+    load_config,
+    load_data,
+)
 
 
 def create_project(tmp_path: Path) -> Path:
@@ -328,3 +335,68 @@ def test_build_site_without_clean_output(tmp_path):
     )
     # File should still exist since we didn't clean
     assert marker.exists()
+
+
+def test_build_error_exception():
+    """Test BuildError exception contains file context."""
+    source = Path("/some/path/page.md")
+    error = BuildError(source, "Something went wrong", ValueError("original"))
+    assert error.source_path == source
+    assert error.message == "Something went wrong"
+    assert isinstance(error.original_error, ValueError)
+    assert "/some/path/page.md" in str(error)
+    assert "Something went wrong" in str(error)
+
+
+def test_format_error_message():
+    """Test _format_error_message formats different exception types."""
+
+    # UndefinedError
+    class UndefinedError(Exception):
+        pass
+
+    err = UndefinedError("'foo' is undefined")
+    err.__class__.__name__ = "UndefinedError"
+    assert "Undefined variable" in _format_error_message(err)
+
+    # TypeError
+    err = TypeError("sorted() got an unexpected keyword argument 'key'")
+    assert "Type error" in _format_error_message(err)
+
+    # AttributeError
+    err = AttributeError("'NoneType' has no attribute 'bar'")
+    assert "Attribute error" in _format_error_message(err)
+
+    # Generic error
+    err = RuntimeError("something else")
+    result = _format_error_message(err)
+    assert "RuntimeError" in result
+    assert "something else" in result
+
+
+def test_build_site_template_error(tmp_path):
+    """Test build_site raises BuildError with file context on template errors."""
+    project = create_project(tmp_path)
+    # Create a page with invalid Jinja2 template syntax
+    bad_page = project / "site" / "broken.html.jinja"
+    bad_page.write_text("{{ undefined_var.nonexistent }}", encoding="utf-8")
+
+    with pytest.raises(BuildError) as exc_info:
+        build_site(project)
+
+    assert exc_info.value.source_path == bad_page
+    assert exc_info.value.original_error is not None
+
+
+def test_build_site_template_syntax_error(tmp_path):
+    """Test build_site raises BuildError for template syntax errors."""
+    project = create_project(tmp_path)
+    # Create a page with invalid Jinja2 syntax
+    bad_page = project / "site" / "broken.html.jinja"
+    bad_page.write_text("{% for x in items %}\nNo end!", encoding="utf-8")
+
+    with pytest.raises(BuildError) as exc_info:
+        build_site(project)
+
+    assert exc_info.value.source_path == bad_page
+    assert "syntax error" in exc_info.value.message.lower()

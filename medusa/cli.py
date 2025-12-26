@@ -52,9 +52,17 @@ def new(name: str):
 def build(drafts: bool):
     """Build the site into the output directory."""
     project_root = Path.cwd()
-    from .build import build_site
+    from .build import BuildError, build_site
 
-    result = build_site(project_root, include_drafts=drafts)
+    try:
+        result = build_site(project_root, include_drafts=drafts)
+    except BuildError as exc:
+        # Display user-friendly error message
+        rel_path = exc.source_path.relative_to(project_root)
+        click.echo(click.style("Build failed:", fg="red", bold=True), err=True)
+        click.echo(click.style(f"  File: {rel_path}", fg="yellow"), err=True)
+        click.echo(click.style(f"  Error: {exc.message}", fg="white"), err=True)
+        raise SystemExit(1) from None
     click.echo(f"Built {len(result.pages)} pages into {result.output_dir}")
 
 
