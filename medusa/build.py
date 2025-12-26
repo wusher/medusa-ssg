@@ -22,7 +22,7 @@ from jinja2 import TemplateSyntaxError
 
 from .assets import AssetPipeline
 from .content import ContentProcessor, Page
-from .templates import TemplateEngine
+from .templates import AssetNotFoundError, TemplateEngine
 from .utils import absolutize_html_urls, build_tags_index, ensure_clean_dir
 
 
@@ -162,6 +162,12 @@ def build_site(
             raise BuildError(
                 page.path,
                 f"Template syntax error on line {exc.lineno}: {exc.message}",
+                exc,
+            ) from exc
+        except AssetNotFoundError as exc:
+            raise BuildError(
+                page.path,
+                f"Missing {exc.asset_type} asset: '{exc.asset_name}'",
                 exc,
             ) from exc
         except Exception as exc:

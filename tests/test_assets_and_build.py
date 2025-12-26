@@ -400,3 +400,18 @@ def test_build_site_template_syntax_error(tmp_path):
 
     assert exc_info.value.source_path == bad_page
     assert "syntax error" in exc_info.value.message.lower()
+
+
+def test_build_site_missing_asset_error(tmp_path):
+    """Test build_site raises BuildError for missing assets referenced in templates."""
+    project = create_project(tmp_path)
+    # Create a page that references a missing image
+    bad_page = project / "site" / "missing-asset.html.jinja"
+    bad_page.write_text("{{ img_path('nonexistent-image') }}", encoding="utf-8")
+
+    with pytest.raises(BuildError) as exc_info:
+        build_site(project)
+
+    assert exc_info.value.source_path == bad_page
+    assert "Missing image asset" in exc_info.value.message
+    assert "nonexistent-image" in exc_info.value.message
