@@ -131,15 +131,6 @@ site/posts/2024-01-15-my-post.md  →  /posts/my-post/
 site/posts/2024-02-20-another.md  →  /posts/another/
 ```
 
-### Custom Layouts
-
-Specify a layout with brackets in the filename:
-
-```
-site/about[minimal].md  →  Uses _layouts/minimal.html.jinja
-site/contact.md         →  Uses _layouts/default.html.jinja
-```
-
 ### Drafts
 
 Prefix files or folders with `_` to mark as draft:

@@ -417,8 +417,6 @@ class ContentProcessor:
     def _resolve_layout(self, path: Path, folder: str) -> str:
         name = path.stem
         layout_dir = self.site_dir / "_layouts"
-        if "[" in name and "]" in name:
-            return name.split("[", 1)[1].split("]", 1)[0]
         group = self._group_from_folder(folder)
         candidates: list[str] = []
         if folder:

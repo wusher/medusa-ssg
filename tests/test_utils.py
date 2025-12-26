@@ -4,13 +4,11 @@ from pathlib import Path
 from medusa import utils
 
 
-def test_slugify_and_titleize_strip_date_and_layout():
+def test_slugify_and_titleize_strip_date():
     assert utils.slugify("2024-01-02-post-title") == "post-title"
-    assert utils.slugify("contact[form]") == "contact"
     assert utils.slugify("mixed-case-slug") == "mixed-case-slug"
     assert utils.slugify("!!!") == "index"
     assert utils.titleize("2024-01-02-post-title.md") == "Post Title"
-    assert utils.titleize("contact[form].md") == "Contact"
     assert utils.titleize("mixed-case-slug.md") == "Mixed Case Slug"
 
 
@@ -99,10 +97,6 @@ def test_extract_number_from_name():
     assert utils.extract_number_from_name("2024-01-15-01-first-section") == 1
     assert utils.extract_number_from_name("2024-01-15-5-middle-section") == 5
 
-    # Layout suffix handling
-    assert utils.extract_number_from_name("01-intro[hero]") == 1
-    assert utils.extract_number_from_name("2024-01-15-02-post[blog]") == 2
-
 
 def test_strip_number_prefix():
     # Simple number prefix
@@ -118,10 +112,6 @@ def test_strip_number_prefix():
 
     # Date prefix with number
     assert utils.strip_number_prefix("2024-01-15-01-first-section") == "first-section"
-
-    # Layout suffix handling
-    assert utils.strip_number_prefix("01-intro[hero]") == "intro"
-    assert utils.strip_number_prefix("2024-01-15-02-post[blog]") == "post"
 
 
 def test_join_and_absolutize_urls():

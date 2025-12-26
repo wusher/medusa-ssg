@@ -31,7 +31,7 @@ def create_site(tmp_path: Path) -> Path:
         "# Post Title\n\nBody text #python", encoding="utf-8"
     )
     (site / "posts" / "_draft.md").write_text("# Draft", encoding="utf-8")
-    (site / "contact[hero].html.jinja").write_text(
+    (site / "contact.html.jinja").write_text(
         "<h1>{{ data.title }}</h1>", encoding="utf-8"
     )
     (site / "raw.html.jinja").write_text('<img src="inline.png">', encoding="utf-8")
@@ -64,8 +64,9 @@ def test_content_processing_builds_pages(tmp_path):
     assert post.date == datetime(2024, 1, 15)
     assert post.layout == "default"
 
-    contact = next(p for p in pages if p.layout == "hero")
+    contact = next(p for p in pages if p.filename == "contact.html.jinja")
     assert contact.source_type == "jinja"
+    assert contact.layout == "default"
 
     raw = next(p for p in pages if p.filename == "raw.html.jinja")
     assert "/assets/images/inline.png" in raw.content

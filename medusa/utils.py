@@ -36,7 +36,7 @@ _URL_SKIP_PREFIXES = (
 
 
 def slugify(name: str) -> str:
-    """Convert filename (without extension) to slug, dropping date and layout suffixes.
+    """Convert filename (without extension) to slug, dropping date prefix.
 
     Args:
         name: Filename stem.
@@ -45,8 +45,6 @@ def slugify(name: str) -> str:
         URL-friendly slug.
     """
     cleaned = name
-    if "[" in cleaned and "]" in cleaned:
-        cleaned = cleaned.split("[", 1)[0]
     if "-" in cleaned:
         parts = cleaned.split("-")
         if len(parts) >= 4 and all(p.isdigit() for p in parts[:3]):
@@ -58,8 +56,6 @@ def slugify(name: str) -> str:
 
 def titleize(filename: str) -> str:
     base = Path(filename).stem
-    if "[" in base and "]" in base:
-        base = base.split("[", 1)[0]
     if "-" in base:
         parts = base.split("-")
         if len(parts) >= 4 and all(p.isdigit() for p in parts[:3]):
@@ -155,10 +151,6 @@ def extract_number_from_name(name: str) -> int | None:
     Returns:
         The extracted number, or None if no number found.
     """
-    # Strip layout suffix if present
-    if "[" in name and "]" in name:
-        name = name.split("[", 1)[0]
-
     parts = name.split("-")
 
     # Check if starts with date (YYYY-MM-DD-)
@@ -184,10 +176,6 @@ def strip_number_prefix(name: str) -> str:
     Returns:
         Filename with date and number prefixes removed.
     """
-    # Strip layout suffix if present
-    if "[" in name and "]" in name:
-        name = name.split("[", 1)[0]
-
     parts = name.split("-")
 
     # Check if starts with date (YYYY-MM-DD-)
