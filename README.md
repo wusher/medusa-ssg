@@ -395,7 +395,7 @@ medusa build
 # Clone and install
 git clone https://github.com/yourname/medusa.git
 cd medusa
-make dev  # Installs dependencies and configures pre-commit hook
+make setup  # Installs dev dependencies and configures pre-commit hook
 
 # Run tests
 pytest
