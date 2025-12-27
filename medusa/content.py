@@ -5,7 +5,15 @@ It extracts metadata, renders content, and creates Page objects representing sit
 
 Key classes:
 - Page: Dataclass representing a site page with all its metadata.
-- ContentProcessor: Class for processing content files and building Page instances.
+- Heading: Dataclass representing a heading for TOC generation.
+- ContentProcessor: Facade for processing content files and building Page instances.
+- FileContentLoader: Implementation of ContentLoader protocol for file-based content.
+- DefaultPageBuilder: Implementation of PageBuilder protocol.
+
+Design principles:
+- Single Responsibility: Each class has one reason to change.
+- Open/Closed: New renderers/extractors can be added without modifying existing code.
+- Dependency Inversion: High-level modules depend on abstractions (protocols).
 """
 
 from __future__ import annotations
@@ -15,15 +23,22 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import mistune
-import yaml
-
+from .extractors import (
+    CompositeMetadataExtractor,
+    DescriptionExtractor,
+    default_metadata_extractor,
+    extract_frontmatter,
+)
+from .renderers import (
+    RendererRegistry,
+    _generate_heading_id,  # noqa: F401 - re-exported for backward compatibility
+    _HighlightRenderer,  # noqa: F401 - re-exported for backward compatibility
+    _rewrite_image_path,
+    default_renderer_registry,
+)
 from .utils import (
-    extract_date_from_name,
-    extract_tags,
-    first_paragraph,
     is_html,
     is_markdown,
     is_template,
@@ -32,29 +47,17 @@ from .utils import (
     titleize,
 )
 
+if TYPE_CHECKING:
+    pass
+
 IMAGE_SRC_RE = re.compile(r'<img\s+[^>]*src="([^"]+)"', re.IGNORECASE)
-FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
+# Re-export for backward compatibility
+_extract_frontmatter = extract_frontmatter
+_extract_excerpt = DescriptionExtractor()._extract_excerpt
 
-def _extract_frontmatter(text: str) -> tuple[dict[str, Any], str]:
-    """Extract YAML frontmatter from content.
-
-    Args:
-        text: Raw file content.
-
-    Returns:
-        Tuple of (frontmatter dict, remaining content).
-    """
-    match = FRONTMATTER_RE.match(text)
-    if not match:
-        return {}, text
-    try:
-        data = yaml.safe_load(match.group(1)) or {}
-        if not isinstance(data, dict):
-            return {}, text
-        return data, text[match.end() :]
-    except yaml.YAMLError:
-        return {}, text
+# Note: _generate_heading_id, _rewrite_image_path, and _HighlightRenderer
+# are re-exported from renderers module for backward compatibility
 
 
 @dataclass
@@ -70,47 +73,6 @@ class Heading:
     id: str
     text: str
     level: int
-
-
-def _generate_heading_id(text: str) -> str:
-    """Generate a URL-friendly ID from heading text.
-
-    Args:
-        text: The heading text.
-
-    Returns:
-        URL-friendly slug suitable for anchor links.
-    """
-    # Convert to lowercase, replace spaces with hyphens, remove special chars
-    slug = text.lower().strip()
-    slug = re.sub(r"[^\w\s-]", "", slug)
-    slug = re.sub(r"[-\s]+", "-", slug)
-    return slug.strip("-")
-
-
-def _extract_excerpt(text: str) -> str:
-    """Extract the first paragraph from markdown text.
-
-    Skips the title heading (# Title) and returns the first actual paragraph.
-
-    Args:
-        text: Markdown text content.
-
-    Returns:
-        The first paragraph as plain text, or empty string if none found.
-    """
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    for para in paragraphs:
-        # Skip headings
-        if para.startswith("#"):
-            continue
-        # Skip images, code blocks, and other non-text elements
-        if para.startswith(("![", "```", "---")):
-            continue
-        # Clean up the paragraph: collapse whitespace
-        cleaned = " ".join(para.split())
-        return cleaned
-    return ""
 
 
 @dataclass
@@ -156,124 +118,290 @@ class Page:
     toc: list[Heading] = field(default_factory=list)
 
 
-def _rewrite_image_path(src: str, folder: str) -> str:
-    """Rewrite image source paths to point to assets directory.
+class FileContentLoader:
+    """Loads content files from a directory.
 
-    Args:
-        src: Original image source.
-        folder: Folder containing the page.
-
-    Returns:
-        Rewritten image source path.
-    """
-    # Skip absolute URLs, root-relative paths, and Jinja template expressions
-    if src.startswith(("http://", "https://", "//", "/")) or "{{" in src:
-        return src
-    prefix = Path(folder) if folder else Path()
-    normalized = (prefix / src).as_posix()
-    return f"/assets/images/{normalized}"
-
-
-class _HighlightRenderer(mistune.HTMLRenderer):
-    """Custom Markdown renderer with image path rewriting and syntax highlighting.
-
-    Attributes:
-        folder: Folder containing the page being rendered.
-        headings: List of Heading objects extracted during rendering.
-    """
-
-    def __init__(self, folder: str):
-        """Initialize the renderer.
-
-        Args:
-            folder: Folder path for image rewriting.
-        """
-        super().__init__(escape=False)
-        self.folder = folder
-        self.headings: list[Heading] = []
-        self._heading_id_counts: dict[str, int] = {}
-
-    def heading(self, text: str, level: int, **attrs) -> str:
-        """Render a heading with auto-generated ID and track for TOC.
-
-        Args:
-            text: Heading text content.
-            level: Heading level (1-6).
-            **attrs: Additional attributes.
-
-        Returns:
-            HTML heading tag with id attribute.
-        """
-        base_id = _generate_heading_id(text)
-
-        # Handle duplicate IDs by appending a counter
-        if base_id in self._heading_id_counts:
-            self._heading_id_counts[base_id] += 1
-            heading_id = f"{base_id}-{self._heading_id_counts[base_id]}"
-        else:
-            self._heading_id_counts[base_id] = 0
-            heading_id = base_id
-
-        # Track this heading for TOC
-        self.headings.append(Heading(id=heading_id, text=text, level=level))
-
-        return f'<h{level} id="{heading_id}">{text}</h{level}>\n'
-
-    def image(self, text: str, url: str | None = None, title: str | None = None):
-        """Render an image tag with rewritten source.
-
-        Args:
-            text: Alt text value from markdown.
-            url: Image source URL.
-            title: Title attribute.
-
-        Returns:
-            HTML image tag string.
-        """
-        src = _rewrite_image_path(url or "", self.folder)
-        return super().image(text, src, title)
-
-    def block_code(self, code: str, info: str | None = None) -> str:
-        """Render a code block with Pygments syntax highlighting.
-
-        Args:
-            code: The code content.
-            info: Language identifier (e.g., 'python', 'javascript').
-
-        Returns:
-            HTML string with highlighted code.
-        """
-        if info:
-            try:
-                from pygments import highlight
-                from pygments.formatters import HtmlFormatter
-                from pygments.lexers import get_lexer_by_name
-
-                lexer = get_lexer_by_name(info, stripall=True)
-                formatter = HtmlFormatter(nowrap=False, cssclass="highlight")
-                return highlight(code, lexer, formatter)
-            except Exception:
-                pass
-        # Fallback: plain code block
-        escaped = code.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        lang_class = f' class="language-{info}"' if info else ""
-        return f"<pre><code{lang_class}>{escaped}</code></pre>\n"
-
-
-class ContentProcessor:
-    """Processes content files and builds Page objects.
+    This class is responsible for discovering and iterating over
+    content files in a site directory. It follows the Single
+    Responsibility Principle - only handles file discovery.
 
     Attributes:
         site_dir: Directory containing site content.
     """
 
     def __init__(self, site_dir: Path):
-        """Initialize the content processor.
+        """Initialize the content loader.
 
         Args:
             site_dir: Path to the site content directory.
         """
         self.site_dir = site_dir
+
+    def iter_files(self, include_drafts: bool = False) -> list[Path]:
+        """Iterate over all content files.
+
+        Args:
+            include_drafts: Whether to include draft files.
+
+        Returns:
+            List of paths to content files.
+        """
+        files: list[Path] = []
+        for path in self.site_dir.rglob("*"):
+            if path.is_dir():
+                continue
+            rel = path.relative_to(self.site_dir)
+            parts = rel.parts
+            # Skip internal directories (starting with _)
+            if any(part.startswith("_") for part in parts[:-1]):
+                continue
+            # Skip drafts unless requested
+            if rel.name.startswith("_") and not include_drafts:
+                continue
+            # Only include processable files
+            if is_markdown(path) or is_template(path) or is_html(path):
+                files.append(path)
+        return files
+
+
+class LayoutResolver:
+    """Resolves layout templates for pages.
+
+    This class is responsible for determining which layout template
+    to use for a given page. It follows the Single Responsibility
+    Principle - only handles layout resolution.
+
+    Attributes:
+        site_dir: Directory containing site content and layouts.
+    """
+
+    def __init__(self, site_dir: Path):
+        """Initialize the layout resolver.
+
+        Args:
+            site_dir: Path to the site content directory.
+        """
+        self.site_dir = site_dir
+        self.layout_dir = site_dir / "_layouts"
+
+    def resolve(self, path: Path, folder: str) -> str:
+        """Resolve the layout for a page.
+
+        Searches for layouts in order:
+        1. {folder}/{name} - Most specific
+        2. {group} - Group-level layout
+        3. default - Fallback
+
+        Args:
+            path: Path to the source file.
+            folder: Folder containing the page.
+
+        Returns:
+            Layout name to use.
+        """
+        name = path.stem
+        group = self._group_from_folder(folder)
+        candidates: list[str] = []
+
+        if folder:
+            candidates.append(f"{folder}/{name}")
+            candidates.append(group)
+        else:
+            candidates.append(name)
+        candidates.append("default")
+
+        for candidate in candidates:
+            for suffix in (".html.jinja", ".jinja", ".html", ""):
+                target = self.layout_dir / f"{candidate}{suffix}"
+                if target.exists():
+                    return candidate
+        return "default"
+
+    def _group_from_folder(self, folder: str) -> str:
+        """Extract the group from a folder path.
+
+        Args:
+            folder: Folder path.
+
+        Returns:
+            The first component of the folder path, or empty string.
+        """
+        if not folder:
+            return ""
+        first = Path(folder).parts[0]
+        return first
+
+
+class UrlDeriver:
+    """Derives URLs for pages.
+
+    This class is responsible for generating URL paths for pages
+    based on their location in the site structure. It follows the
+    Single Responsibility Principle - only handles URL derivation.
+    """
+
+    def derive(self, rel: Path, slug: str) -> str:
+        """Derive the URL for a page.
+
+        Args:
+            rel: Relative path from site directory.
+            slug: URL-friendly slug.
+
+        Returns:
+            URL path for the page.
+        """
+        parent = "" if rel.parent == Path(".") else rel.parent.as_posix()
+        if rel.stem == "index" and not parent:
+            return "/"
+        segments = [p for p in rel.parent.parts if p]
+        if slug == "index":
+            url_parts = segments
+        else:
+            url_parts = segments + [slug]
+        path = "/".join(url_parts)
+        return f"/{path}/" if path else "/"
+
+
+class DefaultPageBuilder:
+    """Builds Page objects from source files.
+
+    This class coordinates the various components (renderers, extractors,
+    resolvers) to build complete Page objects. It follows the Dependency
+    Inversion Principle - depends on abstractions rather than concretions.
+
+    Attributes:
+        site_dir: Directory containing site content.
+        renderer_registry: Registry of content renderers.
+        metadata_extractor: Composite metadata extractor.
+        layout_resolver: Layout resolver instance.
+        url_deriver: URL deriver instance.
+    """
+
+    def __init__(
+        self,
+        site_dir: Path,
+        renderer_registry: RendererRegistry | None = None,
+        metadata_extractor: CompositeMetadataExtractor | None = None,
+    ):
+        """Initialize the page builder.
+
+        Args:
+            site_dir: Path to the site content directory.
+            renderer_registry: Optional custom renderer registry.
+            metadata_extractor: Optional custom metadata extractor.
+        """
+        self.site_dir = site_dir
+        self.renderer_registry = renderer_registry or default_renderer_registry
+        self.metadata_extractor = metadata_extractor or default_metadata_extractor
+        self.layout_resolver = LayoutResolver(site_dir)
+        self.url_deriver = UrlDeriver()
+
+    def build(self, path: Path, draft: bool = False) -> Page:
+        """Build a Page object from a source file.
+
+        Args:
+            path: Path to the source file.
+            draft: Whether this is a draft page.
+
+        Returns:
+            Page object.
+        """
+        rel = path.relative_to(self.site_dir)
+        folder = str(rel.parent.as_posix()) if rel.parent != Path(".") else ""
+        filename = path.name
+        raw_body = path.read_text(encoding="utf-8")
+
+        # Extract metadata
+        metadata = self.metadata_extractor.extract(raw_body, path)
+        frontmatter = metadata.get("frontmatter", {})
+        body = metadata.get("body", raw_body)
+
+        # Get renderer and render content
+        renderer = self.renderer_registry.get_renderer(path)
+        if renderer:
+            source_type = renderer.source_type
+            render_source = strip_hashtags(body)
+            content, toc = renderer.render(render_source, folder)
+        else:
+            source_type = "unknown"
+            content = body
+            toc = []
+
+        # Resolve other properties
+        layout = self.layout_resolver.resolve(path, folder)
+        slug = slugify(path.stem)
+        url = self.url_deriver.derive(rel, slug)
+        group = self.layout_resolver._group_from_folder(folder)
+
+        # Rewrite inline images
+        content = self._rewrite_inline_images(content, folder)
+
+        return Page(
+            title=metadata.get("title", titleize(filename)),
+            body=body,
+            content=content,
+            description=metadata.get("description", ""),
+            excerpt=metadata.get("excerpt", ""),
+            url=url,
+            slug=slug,
+            date=metadata.get("date", datetime.now()),
+            tags=metadata.get("tags", []),
+            draft=draft,
+            layout=layout,
+            group=group,
+            path=path,
+            folder=folder,
+            filename=filename,
+            source_type=source_type,
+            frontmatter=frontmatter,
+            toc=toc,
+        )
+
+    def _rewrite_inline_images(self, html: str, folder: str) -> str:
+        """Rewrite image paths in HTML content.
+
+        Args:
+            html: HTML content.
+            folder: Folder containing the page.
+
+        Returns:
+            HTML with rewritten image paths.
+        """
+
+        def repl(match: re.Match) -> str:
+            src = match.group(1)
+            rewritten = _rewrite_image_path(src, folder)
+            return match.group(0).replace(src, rewritten)
+
+        return IMAGE_SRC_RE.sub(repl, html)
+
+
+class ContentProcessor:
+    """Facade for processing content files and building Page objects.
+
+    This class provides backward compatibility with the original API
+    while internally delegating to the new SOLID-compliant components.
+
+    Attributes:
+        site_dir: Directory containing site content.
+    """
+
+    def __init__(
+        self,
+        site_dir: Path,
+        content_loader: FileContentLoader | None = None,
+        page_builder: DefaultPageBuilder | None = None,
+    ):
+        """Initialize the content processor.
+
+        Args:
+            site_dir: Path to the site content directory.
+            content_loader: Optional custom content loader.
+            page_builder: Optional custom page builder.
+        """
+        self.site_dir = site_dir
+        self._content_loader = content_loader or FileContentLoader(site_dir)
+        self._page_builder = page_builder or DefaultPageBuilder(site_dir)
 
     def load(self, include_drafts: bool = False) -> list[Page]:
         """Load all content files and create Page objects.
@@ -285,172 +413,30 @@ class ContentProcessor:
             List of Page objects.
         """
         pages: list[Page] = []
-        for path in self._iter_source_files(include_drafts):
+        for path in self._content_loader.iter_files(include_drafts):
             draft = path.name.startswith("_")
-            page = self._build_page(path, draft=draft)
+            page = self._page_builder.build(path, draft=draft)
             pages.append(page)
         return pages
 
+    # Legacy methods for backward compatibility
     def _iter_source_files(self, include_drafts: bool) -> Iterable[Path]:
         """Iterate over all source files in the site directory.
 
-        Yields:
-            Paths to content files (markdown, html, and jinja templates).
+        Deprecated: Use content_loader.iter_files() instead.
         """
-        for path in self.site_dir.rglob("*"):
-            if path.is_dir():
-                continue
-            rel = path.relative_to(self.site_dir)
-            parts = rel.parts
-            if any(part.startswith("_") for part in parts[:-1]):
-                continue
-            if rel.name.startswith("_") and not include_drafts:
-                continue
-            if is_markdown(path) or is_template(path) or is_html(path):
-                yield path
+        return self._content_loader.iter_files(include_drafts)
 
     def _build_page(self, path: Path, draft: bool) -> Page:
         """Build a Page object from a source file.
 
-        Args:
-            path: Path to the source file.
-            draft: Whether this is a draft.
-
-        Returns:
-            Page object.
+        Deprecated: Use page_builder.build() instead.
         """
-        rel = path.relative_to(self.site_dir)
-        folder = str(rel.parent.as_posix()) if rel.parent != Path(".") else ""
-        filename = path.name
-        raw_body = path.read_text(encoding="utf-8")
-
-        frontmatter, body = _extract_frontmatter(raw_body)
-
-        date = extract_date_from_name(path.stem) or datetime.fromtimestamp(
-            path.stat().st_mtime
-        )
-        layout = self._resolve_layout(path, folder)
-
-        slug = slugify(path.stem)
-        url = self._derive_url(rel, slug)
-
-        toc: list[Heading] = []
-        excerpt: str = ""
-
-        if is_markdown(path):
-            tags = extract_tags(body)
-            render_source = strip_hashtags(body)
-            content, toc = self._render_markdown(render_source, folder)
-            title = self._resolve_title(body, filename)
-            description = first_paragraph(strip_hashtags(body))
-            excerpt = _extract_excerpt(strip_hashtags(body))
-            source_type = "markdown"
-        elif is_html(path):
-            tags = extract_tags(body)
-            render_source = strip_hashtags(body)
-            content = render_source
-            title = self._resolve_title(body, filename)
-            description = first_paragraph(strip_hashtags(body))
-            source_type = "html"
-        else:
-            # Jinja templates
-            tags = extract_tags(body)
-            render_source = strip_hashtags(body)
-            content = render_source
-            title = self._resolve_title(body, filename)
-            description = first_paragraph(strip_hashtags(body))
-            source_type = "jinja"
-
-        return Page(
-            title=title,
-            body=body,
-            content=self._rewrite_inline_images(content, folder),
-            description=description,
-            excerpt=excerpt,
-            url=url,
-            slug=slug,
-            date=date,
-            tags=tags,
-            draft=draft,
-            layout=layout,
-            group=self._group_from_folder(folder),
-            path=path,
-            folder=folder,
-            filename=filename,
-            source_type=source_type,
-            frontmatter=frontmatter,
-            toc=toc,
-        )
-
-    def _render_markdown(self, text: str, folder: str) -> tuple[str, list[Heading]]:
-        """Render markdown text to HTML and extract headings.
-
-        Args:
-            text: Markdown text to render.
-            folder: Folder containing the page (for image path rewriting).
-
-        Returns:
-            Tuple of (rendered HTML, list of Heading objects for TOC).
-        """
-        cleaned = strip_hashtags(text)
-        renderer = _HighlightRenderer(folder)
-        markdown = mistune.create_markdown(
-            renderer=renderer, plugins=["strikethrough", "footnotes", "table", "url"]
-        )
-        content = markdown(cleaned)
-        return content, renderer.headings
+        return self._page_builder.build(path, draft)
 
     def _rewrite_inline_images(self, html: str, folder: str) -> str:
-        def repl(match: re.Match) -> str:
-            src = match.group(1)
-            rewritten = _rewrite_image_path(src, folder)
-            return match.group(0).replace(src, rewritten)
+        """Rewrite image paths in HTML content.
 
-        return IMAGE_SRC_RE.sub(repl, html)
-
-    def _resolve_title(self, body: str, filename: str) -> str:
-        for line in body.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("# "):
-                return stripped.lstrip("# ").strip()
-        return titleize(filename)
-
-    def _resolve_layout(self, path: Path, folder: str) -> str:
-        name = path.stem
-        layout_dir = self.site_dir / "_layouts"
-        group = self._group_from_folder(folder)
-        candidates: list[str] = []
-        if folder:
-            # Most specific: folder-based layout matching the full folder/name path.
-            candidates.append(f"{folder}/{name}")
-            # Next: layout matching just the top-level folder.
-            candidates.append(group)
-        else:
-            # Root-level file: try a layout that matches the filename.
-            candidates.append(name)
-        # Fallback: default layout.
-        candidates.append("default")
-        for candidate in candidates:
-            for suffix in (".html.jinja", ".jinja", ".html", ""):
-                target = layout_dir / f"{candidate}{suffix}"
-                if target.exists():
-                    return candidate
-        return "default"
-
-    def _group_from_folder(self, folder: str) -> str:
-        if not folder:
-            return ""
-        first = Path(folder).parts[0]
-        return first
-
-    def _derive_url(self, rel: Path, slug: str) -> str:
-        parent = "" if rel.parent == Path(".") else rel.parent.as_posix()
-        if rel.stem == "index" and not parent:
-            return "/"
-        segments = [p for p in rel.parent.parts if p]
-        if slug == "index":
-            url_parts = segments
-        else:
-            url_parts = segments + [slug]
-        path = "/".join(url_parts)
-        return f"/{path}/" if path else "/"
+        Deprecated: Use page_builder._rewrite_inline_images() instead.
+        """
+        return self._page_builder._rewrite_inline_images(html, folder)

@@ -94,7 +94,7 @@ def test_js_minify_prefers_terser(monkeypatch, tmp_path):
     project = create_project(tmp_path)
     output = project / "out"
     pipeline = AssetPipeline(project, output)
-    monkeypatch.setattr("medusa.assets.jsmin", None)
+    monkeypatch.setattr("medusa.asset_processors.jsmin", None)
 
     terser_bin = project / "node_modules" / ".bin" / "terser"
     terser_bin.parent.mkdir(parents=True, exist_ok=True)
@@ -117,7 +117,7 @@ def test_js_minify_terser_failure(monkeypatch, tmp_path, capsys):
     project = create_project(tmp_path)
     output = project / "out"
     pipeline = AssetPipeline(project, output)
-    monkeypatch.setattr("medusa.assets.jsmin", None)
+    monkeypatch.setattr("medusa.asset_processors.jsmin", None)
 
     terser_bin = project / "node_modules" / ".bin" / "terser"
     terser_bin.parent.mkdir(parents=True, exist_ok=True)
@@ -199,7 +199,9 @@ def test_minify_js_skips_when_missing(monkeypatch, tmp_path):
     project = create_project(tmp_path)
     output = project / "out"
     pipeline = AssetPipeline(project, output)
-    monkeypatch.setattr("medusa.assets.jsmin", None)
+    monkeypatch.setattr("medusa.asset_processors.jsmin", None)
+    # Also need to ensure terser is not found
+    monkeypatch.setattr(shutil, "which", lambda _: None)
     pipeline._minify_js()
     js_out = output / "assets" / "js" / "main.js"
     assert js_out.exists()

@@ -5,6 +5,10 @@ It manages template loading, global variables, and rendering of content with lay
 
 Key class:
 - TemplateEngine: Handles template rendering and provides context to templates.
+
+Design principles:
+- Single Responsibility: Template rendering is separate from asset resolution.
+- Dependency Inversion: Engine depends on abstractions for asset resolution.
 """
 
 from __future__ import annotations
@@ -16,33 +20,13 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 from markupsafe import Markup
 
+from .asset_resolver import AssetNotFoundError, DefaultAssetPathResolver
 from .collections import PageCollection, TagCollection
 from .content import Heading, Page
 from .utils import join_root_url
 
-
-class AssetNotFoundError(Exception):
-    """Error raised when an asset file is not found.
-
-    Attributes:
-        asset_name: The name of the asset that was requested.
-        asset_type: The type of asset (e.g., "image", "font", "js", "css").
-        searched_paths: List of paths that were searched.
-    """
-
-    def __init__(
-        self,
-        asset_name: str,
-        asset_type: str,
-        searched_paths: list[Path],
-    ):
-        self.asset_name = asset_name
-        self.asset_type = asset_type
-        self.searched_paths = searched_paths
-        paths_str = ", ".join(str(p) for p in searched_paths)
-        super().__init__(
-            f"{asset_type} asset '{asset_name}' not found. Searched: {paths_str}"
-        )
+# Re-export AssetNotFoundError for backward compatibility
+__all__ = ["AssetNotFoundError", "TemplateEngine", "render_toc"]
 
 
 def render_toc(page: Page) -> Markup:
@@ -123,22 +107,33 @@ def _render_toc_from_headings(headings: list[Heading]) -> Markup:
 class TemplateEngine:
     """Template rendering engine using Jinja2.
 
+    This class handles template rendering and provides context to templates.
+    Asset path resolution is delegated to DefaultAssetPathResolver, following
+    the Single Responsibility Principle.
+
     Attributes:
         site_dir: Directory containing templates.
         data: Global site data.
         env: Jinja2 environment.
         pages: List of all pages.
         tags: Dictionary of tags to pages.
+        asset_resolver: Resolver for asset paths.
     """
 
     def __init__(
-        self, site_dir: Path, data: dict[str, Any], root_url: str | None = None
+        self,
+        site_dir: Path,
+        data: dict[str, Any],
+        root_url: str | None = None,
+        asset_resolver: DefaultAssetPathResolver | None = None,
     ):
         """Initialize the template engine.
 
         Args:
             site_dir: Directory with templates.
             data: Global site data.
+            root_url: Optional base URL for links.
+            asset_resolver: Optional custom asset resolver.
         """
         self.site_dir = site_dir
         self.data = data
@@ -158,9 +153,15 @@ class TemplateEngine:
         )
         self.pages: Iterable[Page] = []
         self.tags: dict[str, list[Page]] = {}
+
+        # Initialize asset resolver with URL generator
+        self.asset_resolver = asset_resolver or DefaultAssetPathResolver(site_dir)
+        self.asset_resolver.set_url_generator(self._url_for)
+
         self._install_globals()
 
     def _install_globals(self) -> None:
+        """Install global variables and functions in the Jinja environment."""
         self.env.globals["data"] = self.data
         self.env.globals["pages"] = self.pages
         self.env.globals["tags"] = self.tags
@@ -189,125 +190,80 @@ class TemplateEngine:
     def _js_path(self, name: str) -> str:
         """Return URL path for a JavaScript file.
 
+        Delegates to the asset resolver.
+
         Args:
-            name: Filename with or without extension (e.g., "app" or "app.js").
+            name: Filename with or without extension.
 
         Returns:
             URL path like /assets/js/app.js
-
-        Raises:
-            AssetNotFoundError: If the JavaScript file doesn't exist.
         """
-        if not name.endswith(".js"):
-            name = f"{name}.js"
-        file_path = self.site_dir.parent / "assets" / "js" / name
-        if not file_path.exists():
-            raise AssetNotFoundError(name, "JavaScript", [file_path])
-        return self._url_for(f"/assets/js/{name}")
+        return self.asset_resolver.js_path(name)
 
     def _css_path(self, name: str) -> str:
         """Return URL path for a CSS file.
 
+        Delegates to the asset resolver.
+
         Args:
-            name: Filename with or without extension (e.g., "main" or "main.css").
+            name: Filename with or without extension.
 
         Returns:
             URL path like /assets/css/main.css
-
-        Raises:
-            AssetNotFoundError: If the CSS file doesn't exist.
         """
-        if not name.endswith(".css"):
-            name = f"{name}.css"
-        file_path = self.site_dir.parent / "assets" / "css" / name
-        if not file_path.exists():
-            raise AssetNotFoundError(name, "CSS", [file_path])
-        return self._url_for(f"/assets/css/{name}")
+        return self.asset_resolver.css_path(name)
 
     def _img_path(self, name: str) -> str:
-        """Return URL path for an image file, auto-detecting extension.
+        """Return URL path for an image file.
 
-        Searches for the image with extensions in order: png, jpg, jpeg, gif, svg, webp.
-        If name already has an extension, validates it exists.
+        Delegates to the asset resolver.
 
         Args:
-            name: Filename with or without extension (e.g., "logo" or "logo.png").
+            name: Filename with or without extension.
 
         Returns:
             URL path like /assets/images/logo.png
-
-        Raises:
-            AssetNotFoundError: If no matching image file is found.
         """
-        assets_dir = self.site_dir.parent / "assets" / "images"
-        extensions = ("png", "jpg", "jpeg", "gif", "svg", "webp")
-
-        # If already has a known image extension, validate it exists
-        for ext in extensions:
-            if name.endswith(f".{ext}"):
-                file_path = assets_dir / name
-                if not file_path.exists():
-                    raise AssetNotFoundError(name, "image", [file_path])
-                return self._url_for(f"/assets/images/{name}")
-
-        # Auto-detect extension
-        searched_paths = []
-        for ext in extensions:
-            file_path = assets_dir / f"{name}.{ext}"
-            searched_paths.append(file_path)
-            if file_path.exists():
-                return self._url_for(f"/assets/images/{name}.{ext}")
-
-        raise AssetNotFoundError(name, "image", searched_paths)
+        return self.asset_resolver.img_path(name)
 
     def _font_path(self, name: str) -> str:
-        """Return URL path for a font file, auto-detecting extension.
+        """Return URL path for a font file.
 
-        Searches for the font with extensions in order: woff2, woff, ttf, otf, eot.
-        If name already has an extension, validates it exists.
+        Delegates to the asset resolver.
 
         Args:
-            name: Filename with or without extension (e.g., "inter" or "inter.woff2").
+            name: Filename with or without extension.
 
         Returns:
             URL path like /assets/fonts/inter.woff2
-
-        Raises:
-            AssetNotFoundError: If no matching font file is found.
         """
-        assets_dir = self.site_dir.parent / "assets" / "fonts"
-        extensions = ("woff2", "woff", "ttf", "otf", "eot")
-
-        # If already has a known font extension, validate it exists
-        for ext in extensions:
-            if name.endswith(f".{ext}"):
-                file_path = assets_dir / name
-                if not file_path.exists():
-                    raise AssetNotFoundError(name, "font", [file_path])
-                return self._url_for(f"/assets/fonts/{name}")
-
-        # Auto-detect extension
-        searched_paths = []
-        for ext in extensions:
-            file_path = assets_dir / f"{name}.{ext}"
-            searched_paths.append(file_path)
-            if file_path.exists():
-                return self._url_for(f"/assets/fonts/{name}.{ext}")
-
-        raise AssetNotFoundError(name, "font", searched_paths)
+        return self.asset_resolver.font_path(name)
 
     def update_collections(
         self, pages: Iterable[Page], tags: dict[str, list[Page]]
     ) -> None:
+        """Update the page and tag collections.
+
+        Args:
+            pages: Iterable of all pages.
+            tags: Dictionary mapping tag names to page lists.
+        """
         self.pages = PageCollection(pages)
         self.tags = TagCollection(tags)
         self.env.globals["pages"] = self.pages
         self.env.globals["tags"] = self.tags
 
     def _url_for(self, path: str) -> str:
+        """Generate a URL for a path, applying root_url if configured.
+
+        Args:
+            path: Path to generate URL for.
+
+        Returns:
+            Full URL with root_url prefix if configured.
+        """
         if path.startswith(("http://", "https://", "//")):
             return path
-        # Always keep asset URLs relative to avoid cross-origin issues during dev.
         base = self.root_url or (
             self.data.get("url", "") if isinstance(self.data, dict) else ""
         )
@@ -316,6 +272,14 @@ class TemplateEngine:
         return path if path.startswith("/") else f"/{path}"
 
     def render_page(self, page: Page) -> str:
+        """Render a page with its layout.
+
+        Args:
+            page: Page object to render.
+
+        Returns:
+            Rendered HTML string.
+        """
         context = {
             "data": self.data,
             "current_page": page,
@@ -333,12 +297,29 @@ class TemplateEngine:
             return body_html
 
     def _render_body(self, page: Page, context: dict[str, Any]) -> str:
+        """Render the page body.
+
+        Args:
+            page: Page object to render.
+            context: Template context dictionary.
+
+        Returns:
+            Rendered body HTML.
+        """
         if page.source_type == "jinja":
             template = self.env.from_string(page.content)
             return template.render(**context)
         return page.content
 
     def _resolve_layout_template(self, layout: str):
+        """Resolve and return the layout template.
+
+        Args:
+            layout: Layout name to resolve.
+
+        Returns:
+            Jinja2 Template object.
+        """
         candidates = [
             f"{layout}.html.jinja",
             f"{layout}.jinja",
@@ -361,3 +342,16 @@ class TemplateEngine:
             except TemplateNotFound:
                 continue
         return self.env.from_string("{{ page_content | safe }}")
+
+    def render_string(self, template: str, context: dict[str, Any]) -> str:
+        """Render a template string.
+
+        Args:
+            template: Template string to render.
+            context: Variables to make available in the template.
+
+        Returns:
+            Rendered string.
+        """
+        tmpl = self.env.from_string(template)
+        return tmpl.render(**context)
