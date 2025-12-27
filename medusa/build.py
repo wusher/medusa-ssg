@@ -17,9 +17,7 @@ Design principles:
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,8 +27,10 @@ from jinja2 import TemplateSyntaxError
 from .asset_resolver import AssetNotFoundError
 from .assets import AssetPipeline
 from .content import ContentProcessor, Page
+from .feeds import create_default_feed_registry
+from .html_utils import absolutize_html_urls
 from .templates import TemplateEngine
-from .utils import absolutize_html_urls, build_tags_index, ensure_clean_dir
+from .utils import build_tags_index, ensure_clean_dir
 
 
 class BuildError(Exception):
@@ -188,8 +188,11 @@ def build_site(
         _write_page(output_dir, page, rendered)
 
     AssetPipeline(project_root, output_dir).run()
-    _write_sitemap(output_dir, data, pages)
-    _write_rss(output_dir, data, pages)
+
+    # Generate feeds (sitemap, RSS, etc.)
+    feed_registry = create_default_feed_registry()
+    feed_registry.generate_all(output_dir, pages, data)
+
     return BuildResult(pages=pages, output_dir=output_dir, data=data)
 
 
@@ -230,60 +233,3 @@ def _write_page(output_dir: Path, page: Page, rendered: str) -> None:
     html_path = target_dir / "index.html"
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(rendered)
-
-
-def _write_sitemap(
-    output_dir: Path, data: dict[str, Any], pages: Iterable[Page]
-) -> None:
-    """Generate and write sitemap.xml.
-
-    Args:
-        output_dir: Output directory for the sitemap.
-        data: Site data dictionary.
-        pages: Iterable of all pages.
-    """
-    base_url = str(data.get("url", "")).rstrip("/")
-    if not base_url:
-        return
-    lines = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    ]
-    for page in pages:
-        full_url = f"{base_url}{page.url}"
-        lastmod = page.date.strftime("%Y-%m-%d")
-        lines.append(f"  <url><loc>{full_url}</loc><lastmod>{lastmod}</lastmod></url>")
-    lines.append("</urlset>")
-    (output_dir / "sitemap.xml").write_text("\n".join(lines), encoding="utf-8")
-
-
-def _write_rss(output_dir: Path, data: dict[str, Any], pages: Iterable[Page]) -> None:
-    """Generate and write rss.xml feed.
-
-    Args:
-        output_dir: Output directory for the RSS feed.
-        data: Site data dictionary.
-        pages: Iterable of all pages.
-    """
-    base_url = str(data.get("url", "")).rstrip("/")
-    title = data.get("title", "Medusa Feed")
-    if not base_url:
-        return
-    items = []
-    for page in sorted(pages, key=lambda p: p.date, reverse=True):
-        link = f"{base_url}{page.url}"
-        pub_date = page.date.strftime("%a, %d %b %Y %H:%M:%S +0000")
-        description = page.description or page.title
-        items.append(
-            f"<item><title>{page.title}</title><link>{link}</link><description>{description}</description><pubDate>{pub_date}</pubDate></item>"
-        )
-    rss = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        '<rss version="2.0"><channel>',
-        f"<title>{title}</title>",
-        f"<link>{base_url}</link>",
-        f"<lastBuildDate>{datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')}</lastBuildDate>",
-    ]
-    rss.extend(items)
-    rss.append("</channel></rss>")
-    (output_dir / "rss.xml").write_text("\n".join(rss), encoding="utf-8")

@@ -23,7 +23,7 @@ from markupsafe import Markup
 from .asset_resolver import AssetNotFoundError, DefaultAssetPathResolver
 from .collections import PageCollection, TagCollection
 from .content import Heading, Page
-from .utils import join_root_url
+from .html_utils import escape_html, join_root_url
 
 # Re-export AssetNotFoundError for backward compatibility
 __all__ = ["AssetNotFoundError", "TemplateEngine", "render_toc"]
@@ -81,18 +81,8 @@ def _render_toc_from_headings(headings: list[Heading]) -> Markup:
             level_stack.append(level)
 
         # Escape text for HTML safety
-        escaped_text = (
-            heading.text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-        )
-        escaped_id = (
-            heading.id.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-        )
+        escaped_text = escape_html(heading.text)
+        escaped_id = escape_html(heading.id)
 
         html_parts.append(f'<li><a href="#{escaped_id}">{escaped_text}</a>')
 

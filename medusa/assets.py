@@ -15,7 +15,6 @@ Design principles:
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from .asset_processors import (
@@ -24,6 +23,7 @@ from .asset_processors import (
     TailwindCSSProcessor,
     create_default_registry,
 )
+from .executable_utils import find_executable
 
 # Keep these imports for backward compatibility
 try:
@@ -154,11 +154,6 @@ class AssetPipeline:
         """Find an executable in PATH or local node_modules.
 
         Deprecated: Each processor now handles its own executable discovery.
+        Use executable_utils.find_executable() instead.
         """
-        found = shutil.which(name)
-        if found:
-            return found
-        local = self.project_root / "node_modules" / ".bin" / name
-        if local.exists():
-            return str(local)
-        return None
+        return find_executable(name, self.project_root)
