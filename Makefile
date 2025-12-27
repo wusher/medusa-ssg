@@ -1,4 +1,4 @@
-.PHONY: build publish clean install dev test lint
+.PHONY: build publish clean install setup test lint
 
 # Build the package
 build: clean
@@ -23,9 +23,10 @@ clean:
 install:
 	pip install -e .
 
-# Install with dev dependencies
-dev:
+# Set up development environment (install deps + configure git hooks)
+setup:
 	pip install -e ".[dev]"
+	git config core.hooksPath hooks
 
 # Run tests with coverage (100% minimum)
 test:

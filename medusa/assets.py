@@ -5,14 +5,27 @@ It includes functionality for copying assets, processing Tailwind CSS, and minif
 
 Key components:
 - AssetPipeline: Main class for managing asset processing workflow.
+- Individual processors in asset_processors module for each asset type.
+
+Design principles:
+- Single Responsibility: Each processor handles one asset type.
+- Open/Closed: New asset types can be added via the processor registry.
+- Dependency Inversion: Pipeline depends on processor abstractions.
 """
 
 from __future__ import annotations
 
 import shutil
-import subprocess
 from pathlib import Path
 
+from .asset_processors import (
+    AssetProcessorRegistry,
+    JSProcessor,
+    TailwindCSSProcessor,
+    create_default_registry,
+)
+
+# Keep these imports for backward compatibility
 try:
     from rjsmin import jsmin
 except ImportError:  # pragma: no cover - optional dependency in dev environments
@@ -30,40 +43,88 @@ class AssetPipeline:
     This class manages the asset pipeline, including copying static files,
     processing Tailwind CSS, and minifying JavaScript files.
 
+    The pipeline now delegates to individual asset processors, following
+    the Single Responsibility Principle. New asset types can be added
+    by registering additional processors (Open/Closed Principle).
+
     Attributes:
         project_root (Path): Root directory of the project.
         assets_dir (Path): Directory containing source assets.
         output_dir (Path): Directory where processed assets are written.
+        processor_registry (AssetProcessorRegistry): Registry of asset processors.
     """
 
-    def __init__(self, project_root: Path, output_dir: Path):
+    def __init__(
+        self,
+        project_root: Path,
+        output_dir: Path,
+        processor_registry: AssetProcessorRegistry | None = None,
+    ):
         """Initialize the asset pipeline.
 
         Args:
             project_root: Root directory of the Medusa project.
             output_dir: Directory where built assets will be placed.
+            processor_registry: Optional custom processor registry.
         """
         self.project_root = project_root
         self.assets_dir = project_root / "assets"
         self.output_dir = output_dir
+        self.processor_registry = processor_registry or create_default_registry(
+            project_root, output_dir
+        )
 
     def run(self) -> None:
         """Execute the asset processing pipeline.
 
-        This method copies static assets, processes Tailwind CSS if available,
-        and minifies JavaScript files.
+        This method processes all assets using the registered processors.
+        It handles Tailwind CSS separately to ensure proper content scanning.
         """
         if not self.assets_dir.exists():
             return
-        self._copy_static_assets()
-        self._process_tailwind()
-        self._minify_js()
 
-    def _copy_static_assets(self) -> None:
+        target = self.output_dir / "assets"
+        target.mkdir(parents=True, exist_ok=True)
+
+        # Process all assets through the registry
+        for item in self.assets_dir.rglob("*"):
+            if item.is_dir():
+                continue
+
+            rel = item.relative_to(self.assets_dir)
+            dest = target / rel
+
+            # Skip main.css - handled specially by TailwindCSSProcessor
+            if item.suffix == ".css" and item.name == "main.css":
+                continue
+
+            self.processor_registry.process(item, dest)
+
+        # Process Tailwind CSS separately (needs special handling)
+        self._process_tailwind()
+
+    def _process_tailwind(self) -> None:
+        """Process Tailwind CSS using the dedicated processor.
+
+        This is called separately because Tailwind needs to scan all
+        content files for class names, not just the CSS file.
+        """
+        input_css = self.assets_dir / "css" / "main.css"
+        if not input_css.exists():
+            return
+
+        output_css = self.output_dir / "assets" / "css" / "main.css"
+
+        # Use the TailwindCSSProcessor from the registry
+        tailwind_processor = TailwindCSSProcessor(self.project_root, self.output_dir)
+        tailwind_processor.process(input_css, output_css)
+
+    # Legacy methods for backward compatibility (deprecated)
+    def _copy_static_assets(self) -> None:  # pragma: no cover
         """Copy static assets from assets_dir to output_dir.
 
-        Handles image optimization using PIL if available, and excludes
-        main.css which is processed by Tailwind.
+        Deprecated: The run() method now handles all asset processing
+        through the processor registry.
         """
         target = self.output_dir / "assets"
         target.mkdir(parents=True, exist_ok=True)
@@ -72,90 +133,28 @@ class AssetPipeline:
                 continue
             rel = item.relative_to(self.assets_dir)
             dest = target / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
             if item.suffix == ".css" and item.name == "main.css":
-                # CSS handled by tailwind build step
                 continue
-            if Image and item.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
-                with Image.open(item) as img:
-                    img.save(dest, optimize=True)
-            else:
-                shutil.copy2(item, dest)
-
-    def _process_tailwind(self) -> None:
-        """Process Tailwind CSS using the CLI tool.
-
-        Builds the main.css file with content from site and assets directories.
-        Requires tailwindcss CLI to be installed.
-        """
-        input_css = self.assets_dir / "css" / "main.css"
-        if not input_css.exists():
-            return
-        output_css = self.output_dir / "assets" / "css" / "main.css"
-        output_css.parent.mkdir(parents=True, exist_ok=True)
-        tailwind_bin = self._find_executable("tailwindcss")
-        if not tailwind_bin:
-            print("Tailwind CSS CLI not found; skipping CSS build.")
-            print(
-                "Install with `npm install -g tailwindcss` or `npm install -D tailwindcss` in the project. "
-                "Falling back to unprocessed CSS."
-            )
-            shutil.copy2(input_css, output_css)
-            return
-        content_globs = [
-            str(self.project_root / "site" / "**" / "*.md"),
-            str(self.project_root / "site" / "**" / "*.jinja"),
-            str(self.project_root / "assets" / "**" / "*.js"),
-        ]
-        cmd = [
-            tailwind_bin,
-            "-i",
-            str(input_css),
-            "-o",
-            str(output_css),
-            "--minify",
-            "--content",
-            ",".join(content_globs),
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print("Tailwind build failed:", result.stderr.strip())
-            # fallback to unprocessed CSS to avoid missing file during dev
-            shutil.copy2(input_css, output_css)
+            self.processor_registry.process(item, dest)
 
     def _minify_js(self) -> None:
-        """Minify JavaScript files using rjsmin.
+        """Minify JavaScript files using the JS processor.
 
-        Processes all .js files in the assets directory and writes minified
-        versions to the output directory. Requires rjsmin to be installed.
+        Deprecated: JavaScript processing is now handled by the
+        JSProcessor in the registry.
         """
+        js_processor = JSProcessor(self.project_root)
         target = self.output_dir / "assets"
         for js_file in self.assets_dir.rglob("*.js"):
             rel = js_file.relative_to(self.assets_dir)
             dest = target / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            if jsmin:
-                with open(js_file, encoding="utf-8") as f_in:
-                    minified = jsmin(f_in.read())
-                with open(dest, "w", encoding="utf-8") as f_out:
-                    f_out.write(minified)
-                continue
+            js_processor.process(js_file, dest)
 
-            terser = self._find_executable("terser")
-            if terser:
-                result = subprocess.run(
-                    [terser, str(js_file), "-c", "-m", "-o", str(dest)],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode != 0:
-                    print("JS minification failed via terser:", result.stderr.strip())
-                    shutil.copy2(js_file, dest)
-                continue
+    def _find_executable(self, name: str) -> str | None:  # pragma: no cover
+        """Find an executable in PATH or local node_modules.
 
-            shutil.copy2(js_file, dest)
-
-    def _find_executable(self, name: str) -> str | None:
+        Deprecated: Each processor now handles its own executable discovery.
+        """
         found = shutil.which(name)
         if found:
             return found

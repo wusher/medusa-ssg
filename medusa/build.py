@@ -7,6 +7,12 @@ Key functions:
 - build_site: Main function to build the entire site.
 - load_config: Loads site configuration from medusa.yaml.
 - load_data: Loads site data from YAML files in the data directory.
+
+Design principles:
+- Dependency Inversion: The build function coordinates components through their
+  public interfaces rather than depending on their internal implementations.
+- Single Responsibility: Build orchestration is separate from content processing,
+  template rendering, and asset handling.
 """
 
 from __future__ import annotations
@@ -20,9 +26,10 @@ from typing import Any
 import yaml
 from jinja2 import TemplateSyntaxError
 
+from .asset_resolver import AssetNotFoundError
 from .assets import AssetPipeline
 from .content import ContentProcessor, Page
-from .templates import AssetNotFoundError, TemplateEngine
+from .templates import TemplateEngine
 from .utils import absolutize_html_urls, build_tags_index, ensure_clean_dir
 
 

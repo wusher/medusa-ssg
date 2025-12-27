@@ -2,13 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## IMPORTANT: Before Starting Any Work
+
+**ALWAYS run `make setup` first** before doing any work in this repository. This installs dependencies and configures git pre-commit hooks.
+
+## IMPORTANT: Before Every Commit
+
+**ALWAYS run `make lint test` before committing.** This is mandatory - never commit without running this first and ensuring it passes.
+
 ## Build & Test Commands
 
 ```bash
-make lint test     # Run before committing (required to pass)
+make setup         # REQUIRED before starting work (installs deps + git hooks)
+make lint test     # REQUIRED before every commit
 make lint          # Run ruff check and format
 make test          # Run pytest with 100% coverage requirement
-make dev           # Install with dev dependencies
 python -m pytest tests/test_content.py::test_html_file_processing -v  # Run single test
 ```
 
