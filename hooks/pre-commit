@@ -1,0 +1,12 @@
+#!/bin/bash
+# Pre-commit hook to run linting and tests
+
+echo "Running make lint test..."
+make lint test
+
+if [ $? -ne 0 ]; then
+    echo "Pre-commit check failed. Please fix the issues before committing."
+    exit 1
+fi
+
+echo "Pre-commit checks passed."
