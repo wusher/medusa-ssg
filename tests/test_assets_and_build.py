@@ -339,13 +339,16 @@ def test_build_helpers_handle_missing(monkeypatch, tmp_path):
     (project / "data" / "extra.yaml").write_text("foo: bar", encoding="utf-8")
     assert load_data(project)["extra"] == {"foo": "bar"}
 
-    # _write_sitemap and _write_rss bail when url missing
-    from medusa.build import _write_rss, _write_sitemap
+    # Feed generators bail when url missing
+    from medusa.feeds import RSSGenerator, SitemapGenerator
 
     out = project / "out"
     out.mkdir()
-    _write_sitemap(out, {}, [])
-    _write_rss(out, {}, [])
+    sitemap_gen = SitemapGenerator()
+    rss_gen = RSSGenerator()
+    # Without a base URL, generators return None and don't write files
+    sitemap_gen.write(out, [], {})
+    rss_gen.write(out, [], {})
     assert not (out / "sitemap.xml").exists()
     assert not (out / "rss.xml").exists()
 

@@ -20,6 +20,8 @@ import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from .executable_utils import find_executable
+
 try:
     from rjsmin import jsmin
 except ImportError:  # pragma: no cover
@@ -37,6 +39,9 @@ class BaseAssetProcessor(ABC):
     This abstract base class defines the interface for asset processors
     and provides common functionality. Each subclass handles a specific
     type of asset, following the Single Responsibility Principle.
+
+    Provides shared utilities:
+        - ensure_dest_dir: Creates parent directories for output files.
     """
 
     @property
@@ -70,6 +75,18 @@ class BaseAssetProcessor(ABC):
         """
         ...
 
+    def ensure_dest_dir(self, dest: Path) -> None:
+        """Ensure the parent directory of the destination exists.
+
+        This is a shared utility method to reduce duplication across
+        processor implementations. Should be called at the start of
+        each process() method.
+
+        Args:
+            dest: Destination file path.
+        """
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
 
 class ImageProcessor(BaseAssetProcessor):
     """Optimizes image files using PIL.
@@ -98,7 +115,7 @@ class ImageProcessor(BaseAssetProcessor):
         Returns:
             True if processing was successful.
         """
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        self.ensure_dest_dir(dest)
 
         if Image is not None:
             try:
@@ -138,7 +155,7 @@ class CSSProcessor(BaseAssetProcessor):
         Returns:
             True if processing was successful.
         """
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        self.ensure_dest_dir(dest)
         shutil.copy2(source, dest)
         return True
 
@@ -178,9 +195,9 @@ class TailwindCSSProcessor(BaseAssetProcessor):
         Returns:
             True if processing was successful.
         """
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        self.ensure_dest_dir(dest)
 
-        tailwind_bin = self._find_executable("tailwindcss")
+        tailwind_bin = find_executable("tailwindcss", self.project_root)
         if not tailwind_bin:
             print("Tailwind CSS CLI not found; skipping CSS build.")
             print(
@@ -213,23 +230,6 @@ class TailwindCSSProcessor(BaseAssetProcessor):
             shutil.copy2(source, dest)
 
         return True
-
-    def _find_executable(self, name: str) -> str | None:
-        """Find an executable in PATH or node_modules.
-
-        Args:
-            name: Executable name.
-
-        Returns:
-            Path to executable or None.
-        """
-        found = shutil.which(name)
-        if found:
-            return found
-        local = self.project_root / "node_modules" / ".bin" / name
-        if local.exists():
-            return str(local)
-        return None
 
 
 class JSProcessor(BaseAssetProcessor):
@@ -264,7 +264,7 @@ class JSProcessor(BaseAssetProcessor):
         Returns:
             True if processing was successful.
         """
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        self.ensure_dest_dir(dest)
 
         # Try rjsmin first
         if jsmin is not None:
@@ -278,7 +278,7 @@ class JSProcessor(BaseAssetProcessor):
                 pass
 
         # Try terser
-        terser = self._find_executable("terser")
+        terser = find_executable("terser", self.project_root)
         if terser:
             result = subprocess.run(
                 [terser, str(source), "-c", "-m", "-o", str(dest)],
@@ -292,16 +292,6 @@ class JSProcessor(BaseAssetProcessor):
         # Fallback: simple copy
         shutil.copy2(source, dest)
         return True
-
-    def _find_executable(self, name: str) -> str | None:
-        """Find an executable in PATH or node_modules."""
-        found = shutil.which(name)
-        if found:
-            return found
-        local = self.project_root / "node_modules" / ".bin" / name
-        if local.exists():
-            return str(local)
-        return None
 
 
 class StaticAssetProcessor(BaseAssetProcessor):
@@ -329,7 +319,7 @@ class StaticAssetProcessor(BaseAssetProcessor):
         Returns:
             True if processing was successful.
         """
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        self.ensure_dest_dir(dest)
         shutil.copy2(source, dest)
         return True
 
