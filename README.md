@@ -395,11 +395,7 @@ medusa build
 # Clone and install
 git clone https://github.com/yourname/medusa.git
 cd medusa
-pip install -e ".[dev]"
-
-# Install pre-commit hook (runs lint + tests before each commit)
-cp hooks/pre-commit .git/hooks/pre-commit
-chmod +x .git/hooks/pre-commit
+make dev  # Installs dependencies and configures pre-commit hook
 
 # Run tests
 pytest

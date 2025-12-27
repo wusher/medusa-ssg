@@ -23,9 +23,10 @@ clean:
 install:
 	pip install -e .
 
-# Install with dev dependencies
+# Install with dev dependencies and configure git hooks
 dev:
 	pip install -e ".[dev]"
+	git config core.hooksPath hooks
 
 # Run tests with coverage (100% minimum)
 test:
